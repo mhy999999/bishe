@@ -1,0 +1,59 @@
+server:
+  port: 8080
+  servlet:
+    context-path: /
+
+spring:
+  application:
+    name: bishe-backend
+  profiles:
+    active: dev
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    # 数据库连接地址
+    url: jdbc:mysql://localhost:3306/bishe?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: root
+    # TODO: 请修改为您的数据库密码
+    password: MA151214
+    hikari:
+      minimum-idle: 5
+      maximum-pool-size: 20
+      idle-timeout: 30000
+      pool-name: DatebookHikariCP
+      max-lifetime: 1800000
+      connection-timeout: 30000
+  # Jackson日期格式化配置
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: GMT+8
+    default-property-inclusion: non_null
+
+# MyBatis Plus配置
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  type-aliases-package: com.bishe.entity
+  configuration:
+    # 开启驼峰命名转换
+    map-underscore-to-camel-case: true
+    # 开启日志输出，方便调试SQL
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      # 主键类型：自增
+      id-type: auto
+
+# 日志配置
+logging:
+  level:
+    root: INFO
+    com.bishe: DEBUG
+    org.springframework: WARN
+
+# FISCO BCOS配置 (预留)
+fisco:
+  network:
+    peers:
+      - 127.0.0.1:20200
+  account:
+    # 账户私钥文件路径
+    key-pem: classpath:conf/account.pem
