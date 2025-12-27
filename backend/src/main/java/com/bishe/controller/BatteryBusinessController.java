@@ -754,8 +754,7 @@ public class BatteryBusinessController {
             Files.createDirectories(targetDir);
             Path targetFile = targetDir.resolve(savedName);
             file.transferTo(targetFile.toFile());
-            String baseUrl = request.getScheme() + "://" + request.getServerName() + ":" + request.getServerPort();
-            String url = baseUrl + "/files/sales/" + savedName;
+            String url = "/files/sales/" + savedName;
             return Result.success(url);
         } catch (Exception e) {
             return Result.error(500, "上传失败");

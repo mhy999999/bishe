@@ -38,7 +38,7 @@
       <el-table-column label="材料文件" align="center" width="180">
         <template #default="{ row }">
           <div v-if="parseMaterialUrls(row.materialUrl).length">
-            <el-link v-for="(url, idx) in parseMaterialUrls(row.materialUrl)" :key="url + idx" :href="url"
+            <el-link v-for="(url, idx) in parseMaterialUrls(row.materialUrl)" :key="url + idx" :href="normalizeMaterialLink(url)"
               target="_blank" type="primary" :underline="false" style="margin-right: 8px;">
               文件{{ idx + 1 }}
             </el-link>
@@ -193,6 +193,20 @@ const parseMaterialUrls = (raw) => {
     return text.split(',').map(s => s.trim()).filter(Boolean)
   }
   return [text]
+}
+
+const normalizeMaterialLink = (rawUrl) => {
+  if (!rawUrl) return ''
+  const url = String(rawUrl).trim()
+  if (!url) return ''
+  if (url.startsWith('http://') || url.startsWith('https://')) return url
+
+  const apiBase = (import.meta.env.VITE_APP_BASE_API || '/api').replace(/\/$/, '')
+  if (url.startsWith('/api/')) return url
+  if (url.startsWith('/files/')) return `${apiBase}${url}`
+  if (url.startsWith('files/')) return `${apiBase}/${url}`
+  if (url.startsWith('/')) return url
+  return `${apiBase}/${url}`
 }
 
 const syncMaterialFileList = () => {

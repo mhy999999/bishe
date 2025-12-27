@@ -1,11 +1,20 @@
 package com.bishe;
 
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpServletResponseWrapper;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.context.annotation.Bean;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.web.filter.OncePerRequestFilter;
+
+import java.io.IOException;
 
 @SpringBootApplication
 @MapperScan("com.bishe.mapper")
@@ -35,5 +44,51 @@ public class BisheApplication {
             } catch (Exception ignored) {
             }
         };
+    }
+
+    @Bean
+    public FilterRegistrationBean<OncePerRequestFilter> filesCharsetFilter() {
+        FilterRegistrationBean<OncePerRequestFilter> bean = new FilterRegistrationBean<>();
+        bean.setFilter(new OncePerRequestFilter() {
+            @Override
+            protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
+                    throws ServletException, IOException {
+                String uri = request.getRequestURI();
+                if (uri != null && uri.startsWith("/files/")) {
+                    response.setCharacterEncoding("UTF-8");
+                    HttpServletResponseWrapper wrapper = new HttpServletResponseWrapper(response) {
+                        @Override
+                        public void setContentType(String type) {
+                            if (type != null) {
+                                String lower = type.toLowerCase();
+                                if (lower.startsWith("text/") && !lower.contains("charset=")) {
+                                    super.setContentType(type + ";charset=UTF-8");
+                                    return;
+                                }
+                            }
+                            super.setContentType(type);
+                        }
+
+                        @Override
+                        public void setHeader(String name, String value) {
+                            if ("content-type".equalsIgnoreCase(name) && value != null) {
+                                String lower = value.toLowerCase();
+                                if (lower.startsWith("text/") && !lower.contains("charset=")) {
+                                    super.setHeader(name, value + ";charset=UTF-8");
+                                    return;
+                                }
+                            }
+                            super.setHeader(name, value);
+                        }
+                    };
+                    filterChain.doFilter(request, wrapper);
+                    return;
+                }
+                filterChain.doFilter(request, response);
+            }
+        });
+        bean.addUrlPatterns("/files/*");
+        bean.setOrder(0);
+        return bean;
     }
 }
