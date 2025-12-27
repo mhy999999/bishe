@@ -142,6 +142,13 @@ export const asyncRoutes = [
             meta: { title: '销售记录', icon: 'List' }
           },
           {
+            path: 'material-preview',
+            name: 'SalesMaterialPreview',
+            component: () => import('@/views/battery/sales/material-preview.vue'),
+            meta: { title: '材料预览', icon: 'View', roles: ['admin', 'sales', 'dealer'], activeMenu: '/battery/sales/list' },
+            hidden: true
+          },
+          {
             path: 'audit',
             name: 'SalesAudit',
             component: () => import('@/views/battery/sales/audit.vue'),
