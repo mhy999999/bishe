@@ -202,10 +202,10 @@ public class SystemController {
     }
 
     @GetMapping("/user/list")
-    public Result<Page<SysUser>> listUser(@RequestParam(defaultValue = "1") Integer pageNum,
-                                          @RequestParam(defaultValue = "10") Integer pageSize,
-                                          @RequestParam(required = false) String username,
-                                          HttpServletRequest request) {
+    public Result<Page<UserListVo>> listUser(@RequestParam(defaultValue = "1") Integer pageNum,
+                                             @RequestParam(defaultValue = "10") Integer pageSize,
+                                             @RequestParam(required = false) String username,
+                                             HttpServletRequest request) {
         if (!isAdmin(getCurrentUserId(request))) {
             return forbidden();
         }
@@ -214,12 +214,81 @@ public class SystemController {
         wrapper.like(StringUtils.hasText(username), SysUser::getUsername, username);
         wrapper.orderByDesc(SysUser::getCreateTime);
         Page<SysUser> result = sysUserService.page(page, wrapper);
-        if (result != null && result.getRecords() != null) {
-            for (SysUser u : result.getRecords()) {
-                u.setPassword(null);
+
+        java.util.List<SysUser> users = result == null || result.getRecords() == null ? java.util.List.of() : result.getRecords();
+
+        java.util.Set<Long> deptIds = new java.util.HashSet<>();
+        java.util.List<Long> userIds = new java.util.ArrayList<>();
+        for (SysUser u : users) {
+            if (u == null) {
+                continue;
+            }
+            if (u.getUserId() != null) {
+                userIds.add(u.getUserId());
+            }
+            if (u.getDeptId() != null) {
+                deptIds.add(u.getDeptId());
             }
         }
-        return Result.success(result);
+
+        java.util.Map<Long, String> deptNameById = new java.util.HashMap<>();
+        if (!deptIds.isEmpty()) {
+            LambdaQueryWrapper<SysDept> deptWrapper = new LambdaQueryWrapper<>();
+            deptWrapper.in(SysDept::getDeptId, deptIds);
+            java.util.List<SysDept> depts = sysDeptService.list(deptWrapper);
+            if (depts != null) {
+                for (SysDept d : depts) {
+                    if (d != null && d.getDeptId() != null) {
+                        deptNameById.put(d.getDeptId(), d.getDeptName());
+                    }
+                }
+            }
+        }
+
+        java.util.Map<Long, java.util.List<String>> roleNamesByUserId = new java.util.HashMap<>();
+        if (!userIds.isEmpty()) {
+            java.util.List<java.util.Map<String, Object>> roleRows = sysUserMapper.selectRoleNamesByUserIds(userIds);
+            if (roleRows != null) {
+                for (java.util.Map<String, Object> row : roleRows) {
+                    if (row == null) {
+                        continue;
+                    }
+                    Object userIdObj = row.get("userId");
+                    Object roleNameObj = row.get("roleName");
+                    if (!(userIdObj instanceof Number) || roleNameObj == null) {
+                        continue;
+                    }
+                    Long uid = ((Number) userIdObj).longValue();
+                    String roleName = String.valueOf(roleNameObj);
+                    roleNamesByUserId.computeIfAbsent(uid, k -> new java.util.ArrayList<>()).add(roleName);
+                }
+            }
+        }
+
+        java.util.List<UserListVo> voList = new java.util.ArrayList<>();
+        for (SysUser u : users) {
+            if (u == null) {
+                continue;
+            }
+            UserListVo vo = new UserListVo();
+            vo.setUserId(u.getUserId());
+            vo.setDeptId(u.getDeptId());
+            vo.setDeptName(u.getDeptId() == null ? null : deptNameById.get(u.getDeptId()));
+            vo.setUsername(u.getUsername());
+            vo.setNickname(u.getNickname());
+            vo.setEmail(u.getEmail());
+            vo.setPhone(u.getPhone());
+            vo.setStatus(u.getStatus());
+            vo.setCreateTime(u.getCreateTime());
+            vo.setUpdateTime(u.getUpdateTime());
+            vo.setChainAccount(u.getChainAccount());
+            vo.setRoleNames(roleNamesByUserId.getOrDefault(u.getUserId(), java.util.List.of()));
+            voList.add(vo);
+        }
+
+        Page<UserListVo> out = new Page<>(result.getCurrent(), result.getSize(), result.getTotal());
+        out.setRecords(voList);
+        return Result.success(out);
     }
 
     @GetMapping("/user/{id}")
@@ -551,6 +620,22 @@ public class SystemController {
     @lombok.Data
     public static class DeptNode extends SysDept {
         private java.util.List<DeptNode> children;
+    }
+
+    @lombok.Data
+    public static class UserListVo {
+        private Long userId;
+        private Long deptId;
+        private String deptName;
+        private String username;
+        private String nickname;
+        private String email;
+        private String phone;
+        private Integer status;
+        private java.time.LocalDateTime createTime;
+        private java.time.LocalDateTime updateTime;
+        private String chainAccount;
+        private java.util.List<String> roleNames;
     }
 
     private List<MenuNode> buildMenuTree(List<SysMenu> menus) {

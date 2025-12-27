@@ -15,6 +15,19 @@
       <el-table-column label="用户ID" prop="userId" align="center" width="100" />
       <el-table-column label="用户名" prop="username" align="center" />
       <el-table-column label="昵称" prop="nickname" align="center" />
+      <el-table-column label="部门" prop="deptName" align="center" width="140">
+        <template #default="{ row }">
+          <span>{{ row.deptName || '-' }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="角色" align="center" min-width="160">
+        <template #default="{ row }">
+          <span v-if="!row.roleNames || row.roleNames.length === 0">-</span>
+          <el-tag v-else v-for="name in row.roleNames" :key="name" size="small" style="margin-right: 6px;">
+            {{ name }}
+          </el-tag>
+        </template>
+      </el-table-column>
       <el-table-column label="邮箱" prop="email" align="center" />
       <el-table-column label="手机" prop="phone" align="center" />
       <el-table-column label="状态" align="center" width="120">
@@ -58,8 +71,10 @@
         <el-form-item label="手机" prop="phone">
           <el-input v-model="temp.phone" />
         </el-form-item>
-        <el-form-item label="部门ID" prop="deptId">
-          <el-input v-model="temp.deptId" />
+        <el-form-item label="部门" prop="deptId">
+          <el-tree-select v-model="temp.deptId" :data="deptTreeData" filterable default-expand-all check-strictly
+            style="width: 100%;" :props="{ children: 'children', label: 'deptName', value: 'deptId' }"
+            placeholder="请选择部门" />
         </el-form-item>
         <el-form-item label="状态" prop="status">
           <el-select v-model="temp.status" style="width: 100%;">
@@ -91,7 +106,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import Pagination from '@/components/Pagination/index.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getUserList, createUser, updateUser, deleteUser, getRoleAll, getUserRoleIds, updateUserRoleIds } from '@/api/system'
+import { getUserList, createUser, updateUser, deleteUser, getRoleAll, getUserRoleIds, updateUserRoleIds, getDeptTree } from '@/api/system'
 
 const list = ref([])
 const total = ref(0)
@@ -100,6 +115,7 @@ const dialogFormVisible = ref(false)
 const dialogStatus = ref('')
 const roleOptions = ref([])
 const roleIds = ref([])
+const deptTreeData = ref([])
 
 const textMap = {
   update: '编辑用户',
@@ -145,6 +161,12 @@ const fetchRoleOptions = async () => {
   roleOptions.value = roles || []
 }
 
+const fetchDeptTree = async () => {
+  if (deptTreeData.value.length > 0) return
+  const depts = await getDeptTree()
+  deptTreeData.value = depts || []
+}
+
 const getList = () => {
   listLoading.value = true
   getUserList(listQuery).then(pageData => {
@@ -181,6 +203,7 @@ const resetTemp = () => {
 const handleCreate = async () => {
   resetTemp()
   await fetchRoleOptions()
+  await fetchDeptTree()
   dialogStatus.value = 'create'
   dialogFormVisible.value = true
 }
@@ -188,6 +211,7 @@ const handleCreate = async () => {
 const handleUpdate = async (row) => {
   resetTemp()
   await fetchRoleOptions()
+  await fetchDeptTree()
   Object.assign(temp, row)
   temp.password = ''
   const ids = await getUserRoleIds(row.userId)

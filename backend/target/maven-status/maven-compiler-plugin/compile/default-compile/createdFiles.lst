@@ -18,6 +18,7 @@ com\bishe\controller\SystemController$DeptNode.class
 com\bishe\service\IQualityInspectionService.class
 com\bishe\entity\VehicleInfo.class
 com\bishe\service\ISysDeptService.class
+com\bishe\controller\SystemController$UserListVo.class
 com\bishe\entity\SalesRecord.class
 com\bishe\mapper\SysAuditMapper.class
 com\bishe\entity\BatteryInfo.class

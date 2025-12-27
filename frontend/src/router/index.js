@@ -54,12 +54,6 @@ export const asyncRoutes = [
         meta: { title: '角色管理', icon: 'UserFilled', roles: ['admin'] }
       },
       {
-        path: 'menu',
-        name: 'Menu',
-        component: () => import('@/views/system/menu/index.vue'),
-        meta: { title: '菜单管理', icon: 'Menu', roles: ['admin'] }
-      },
-      {
         path: 'dept',
         name: 'Dept',
         component: () => import('@/views/system/dept/index.vue'),

@@ -16,9 +16,19 @@
           </el-tooltip>
         </template>
       </el-table-column>
-      <el-table-column label="区块高度" prop="blockHeight" align="center" width="100">
+      <el-table-column label="区块序号" prop="blockHeight" align="center" width="120">
+        <template #header>
+          <span>区块序号</span>
+          <el-tooltip content="交易被打包进区块链的第几个区块，可理解为上链顺序" placement="top">
+            <el-icon class="help-icon">
+              <InfoFilled />
+            </el-icon>
+          </el-tooltip>
+        </template>
         <template #default="{ row }">
-          <el-tag type="info">#{{ row.blockHeight }}</el-tag>
+          <el-tooltip :content="'第' + row.blockHeight + '个区块（上链顺序）'" placement="top">
+            <el-tag type="info">#{{ row.blockHeight }}</el-tag>
+          </el-tooltip>
         </template>
       </el-table-column>
       <el-table-column label="调用方法" prop="methodName" align="center" width="150" />
@@ -75,6 +85,7 @@ import { useRoute } from 'vue-router'
 import { getChainList } from '@/api/trace'
 import Pagination from '@/components/Pagination/index.vue'
 import { ElMessage } from 'element-plus'
+import { InfoFilled } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const list = ref([])
@@ -291,5 +302,11 @@ watch(
 .params-raw {
   margin: 0;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+.help-icon {
+  margin-left: 4px;
+  color: #909399;
+  vertical-align: -2px;
 }
 </style>
