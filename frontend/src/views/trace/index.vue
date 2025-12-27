@@ -59,11 +59,13 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { getChainList } from '@/api/trace'
 import Pagination from '@/components/Pagination/index.vue'
 
-const list = ref(null)
+const route = useRoute()
+const list = ref([])
 const total = ref(0)
 const listLoading = ref(true)
 const listQuery = reactive({
@@ -105,8 +107,20 @@ const formatJson = (jsonStr) => {
 }
 
 onMounted(() => {
+  if (route.query?.txHash) {
+    listQuery.txHash = route.query.txHash
+  }
   getList()
 })
+
+watch(
+  () => route.query?.txHash,
+  (txHash) => {
+    listQuery.txHash = txHash || undefined
+    listQuery.pageNum = 1
+    getList()
+  }
+)
 </script>
 
 <style scoped>

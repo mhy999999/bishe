@@ -22,4 +22,26 @@
         user_id, dept_id, username, password, nickname, email, phone, status, create_time, update_time, chain_account
     </sql>
 
+    <select id="selectRoleIdsByUserId" resultType="java.lang.Long">
+        SELECT DISTINCT role_id
+        FROM sys_user_role
+        WHERE user_id = #{userId}
+    </select>
+
+    <delete id="deleteUserRolesByUserId">
+        DELETE FROM sys_user_role WHERE user_id = #{userId}
+    </delete>
+
+    <delete id="deleteUserRolesByRoleId">
+        DELETE FROM sys_user_role WHERE role_id = #{roleId}
+    </delete>
+
+    <insert id="insertUserRoles">
+        INSERT INTO sys_user_role (user_id, role_id)
+        VALUES
+        <foreach collection="roleIds" item="roleId" separator=",">
+            (#{userId}, #{roleId})
+        </foreach>
+    </insert>
+
 </mapper>

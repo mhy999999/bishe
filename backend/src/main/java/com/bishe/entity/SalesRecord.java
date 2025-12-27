@@ -20,4 +20,5 @@ public class SalesRecord {
     private LocalDateTime salesDate;
     private String salesPerson;
     private Integer status;
+    private String auditOpinion;
 }

@@ -21,4 +21,5 @@ public class MaintenanceRecord {
     private LocalDateTime createTime;
     private String txHash;
     private Integer status;
+    private String auditOpinion;
 }

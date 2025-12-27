@@ -1,6 +1,15 @@
 <template>
   <div class="app-container">
     <div class="filter-container">
+      <el-select v-model="listQuery.status" placeholder="审核状态" clearable class="filter-item"
+        style="width: 150px; margin-right: 10px;">
+        <el-option label="待审核" :value="0" />
+        <el-option label="已通过" :value="1" />
+        <el-option label="已驳回" :value="2" />
+      </el-select>
+      <el-button class="filter-item" type="primary" icon="Search" @click="handleFilter">
+        搜索
+      </el-button>
       <el-button class="filter-item" type="primary" icon="Edit" @click="handleCreate">
         新增维修记录
       </el-button>
@@ -18,6 +27,13 @@
           <el-tag :type="statusMap[row.status]?.type || 'info'">
             {{ statusMap[row.status]?.text || '未知' }}
           </el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="操作" align="center" width="150" class-name="small-padding fixed-width">
+        <template #default="{ row }">
+          <el-button v-if="row.status === 0" type="primary" size="small" @click="handleAudit(row)">
+            审核
+          </el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -50,12 +66,32 @@
         </div>
       </template>
     </el-dialog>
+
+    <el-dialog title="审核维修记录" v-model="dialogAuditVisible">
+      <el-form :model="auditTemp" label-width="100px">
+        <el-form-item label="审核结果">
+          <el-radio-group v-model="auditTemp.status">
+            <el-radio :label="1">通过</el-radio>
+            <el-radio :label="2">驳回</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item label="审核意见">
+          <el-input v-model="auditTemp.auditOpinion" type="textarea" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="dialogAuditVisible = false">取消</el-button>
+          <el-button type="primary" @click="submitAudit">确认</el-button>
+        </div>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { getMaintenanceList, saveMaintenance } from '@/api/battery'
+import { getMaintenanceList, saveMaintenance, auditMaintenance } from '@/api/battery'
 import Pagination from '@/components/Pagination/index.vue'
 import { ElMessage } from 'element-plus'
 
@@ -64,7 +100,8 @@ const total = ref(0)
 const listLoading = ref(true)
 const listQuery = reactive({
   pageNum: 1,
-  pageSize: 10
+  pageSize: 10,
+  status: undefined
 })
 
 const statusMap = {
@@ -81,6 +118,18 @@ const temp = reactive({
   solution: '',
   maintainer: ''
 })
+
+const dialogAuditVisible = ref(false)
+const auditTemp = reactive({
+  recordId: undefined,
+  status: 1,
+  auditOpinion: ''
+})
+
+const handleFilter = () => {
+  listQuery.pageNum = 1
+  getList()
+}
 
 const getList = () => {
   listLoading.value = true
@@ -114,6 +163,21 @@ const createData = () => {
   saveMaintenance(temp).then(() => {
     dialogFormVisible.value = false
     ElMessage.success('创建成功，已提交审核')
+    getList()
+  })
+}
+
+const handleAudit = (row) => {
+  auditTemp.recordId = row.recordId
+  auditTemp.status = 1
+  auditTemp.auditOpinion = ''
+  dialogAuditVisible.value = true
+}
+
+const submitAudit = () => {
+  auditMaintenance(auditTemp).then(() => {
+    dialogAuditVisible.value = false
+    ElMessage.success('审核完成')
     getList()
   })
 }

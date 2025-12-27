@@ -9,4 +9,26 @@
         WHERE ur.user_id = #{userId} AND r.status = 0
     </select>
 
+    <select id="selectMenuIdsByRoleId" resultType="java.lang.Long">
+        SELECT DISTINCT menu_id
+        FROM sys_role_menu
+        WHERE role_id = #{roleId}
+    </select>
+
+    <delete id="deleteRoleMenusByRoleId">
+        DELETE FROM sys_role_menu WHERE role_id = #{roleId}
+    </delete>
+
+    <delete id="deleteRoleMenusByMenuId">
+        DELETE FROM sys_role_menu WHERE menu_id = #{menuId}
+    </delete>
+
+    <insert id="insertRoleMenus">
+        INSERT INTO sys_role_menu (role_id, menu_id)
+        VALUES
+        <foreach collection="menuIds" item="menuId" separator=",">
+            (#{roleId}, #{menuId})
+        </foreach>
+    </insert>
+
 </mapper>

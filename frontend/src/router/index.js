@@ -1,5 +1,11 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { h } from 'vue'
+import { createRouter, createWebHistory, RouterView } from 'vue-router'
 import Layout from '@/layout/index.vue'
+
+const ParentView = {
+  name: 'ParentView',
+  render: () => h(RouterView)
+}
 
 export const constantRoutes = [
   {
@@ -28,19 +34,6 @@ export const constantRoutes = [
 ]
 
 export const asyncRoutes = [
-  {
-    path: '/audit',
-    component: Layout,
-    redirect: '/audit/index',
-    children: [
-      {
-        path: 'index',
-        name: 'Audit',
-        component: () => import('@/views/audit/index.vue'),
-        meta: { title: '审核中心', icon: 'Stamp', roles: ['admin'] }
-      }
-    ]
-  },
   {
     path: '/system',
     component: Layout,
@@ -71,6 +64,12 @@ export const asyncRoutes = [
         name: 'Dept',
         component: () => import('@/views/system/dept/index.vue'),
         meta: { title: '部门管理', icon: 'OfficeBuilding', roles: ['admin'] }
+      },
+      {
+        path: 'dict',
+        name: 'Dict',
+        component: () => import('@/views/system/dict/index.vue'),
+        meta: { title: '字典管理', icon: 'Tickets', roles: ['admin'] }
       }
     ]
   },
@@ -96,20 +95,71 @@ export const asyncRoutes = [
       {
         path: 'quality',
         name: 'BatteryQuality',
-        component: () => import('@/views/battery/quality/index.vue'),
-        meta: { title: '出厂质检', icon: 'Checked', roles: ['admin', 'manufacturer'] }
+        component: ParentView,
+        redirect: '/battery/quality/pending',
+        meta: { title: '出厂质检', icon: 'Checked', roles: ['admin', 'manufacturer'] },
+        children: [
+          {
+            path: 'pending',
+            name: 'QualityPending',
+            component: () => import('@/views/battery/quality/index.vue'),
+            meta: { title: '待质检任务', icon: 'Clock' }
+          },
+          {
+            path: 'audit',
+            name: 'QualityAudit',
+            component: () => import('@/views/battery/quality/audit.vue'),
+            meta: { title: '质检审核', icon: 'Stamp' }
+          },
+          {
+            path: 'list',
+            name: 'QualityRecord',
+            component: () => import('@/views/battery/quality/index.vue'),
+            meta: { title: '质检记录', icon: 'List' }
+          }
+        ]
       },
       {
         path: 'maintenance',
         name: 'BatteryMaintenance',
-        component: () => import('@/views/battery/maintenance/index.vue'),
-        meta: { title: '维修保养', icon: 'Tools', roles: ['admin', 'maintainer'] }
+        component: ParentView,
+        redirect: '/battery/maintenance/list',
+        meta: { title: '电池维修', icon: 'Tools', roles: ['admin', 'maintainer'] },
+        children: [
+          {
+            path: 'list',
+            name: 'MaintenanceRecordList',
+            component: () => import('@/views/battery/maintenance/index.vue'),
+            meta: { title: '维修记录', icon: 'List' }
+          },
+          {
+            path: 'audit',
+            name: 'MaintenanceAudit',
+            component: () => import('@/views/battery/maintenance/audit.vue'),
+            meta: { title: '维修审核', icon: 'Stamp' }
+          }
+        ]
       },
       {
         path: 'sales',
         name: 'SalesRecord',
-        component: () => import('@/views/battery/sales/index.vue'),
-        meta: { title: '销售记录', icon: 'ShoppingCart', roles: ['admin', 'sales'] }
+        component: ParentView,
+        redirect: '/battery/sales/list',
+        meta: { title: '电池销售', icon: 'ShoppingCart', roles: ['admin', 'sales'] },
+        children: [
+          {
+            path: 'list',
+            name: 'SalesRecordList',
+            component: () => import('@/views/battery/sales/index.vue'),
+            meta: { title: '销售记录', icon: 'List' }
+          },
+          {
+            path: 'audit',
+            name: 'SalesAudit',
+            component: () => import('@/views/battery/sales/audit.vue'),
+            meta: { title: '销售审核', icon: 'Stamp' }
+          }
+        ]
       }
     ]
   },
@@ -118,7 +168,7 @@ export const asyncRoutes = [
     component: Layout,
     redirect: '/sales/binding',
     name: 'Sales',
-    meta: { title: '销售管理', icon: 'Money', roles: ['admin', 'dealer'] },
+    meta: { title: '渠道销售', icon: 'Money', roles: ['admin', 'dealer'] },
     children: [
       {
         path: 'binding',
@@ -139,7 +189,7 @@ export const asyncRoutes = [
     component: Layout,
     redirect: '/maintenance/monitor',
     name: 'MaintenanceManage',
-    meta: { title: '维修保养', icon: 'FirstAidKit', roles: ['admin', 'maintenance'] },
+    meta: { title: '售后服务', icon: 'FirstAidKit', roles: ['admin', 'maintenance'] },
     children: [
       {
         path: 'monitor',

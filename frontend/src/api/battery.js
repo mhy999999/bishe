@@ -74,6 +74,30 @@ export function saveHealth(data) {
   })
 }
 
+// 生产批次
+export function getBatchList(params) {
+  return request({
+    url: '/battery/batch/list',
+    method: 'get',
+    params
+  })
+}
+
+export function endBatch(batchId) {
+  return request({
+    url: '/battery/batch/end/' + batchId,
+    method: 'post'
+  })
+}
+
+export function saveBatch(data) {
+  return request({
+    url: '/battery/batch',
+    method: 'post',
+    data
+  })
+}
+
 // 故障报警
 export function getAlarmList(params) {
   return request({
@@ -100,6 +124,14 @@ export function saveMaintenance(data) {
   })
 }
 
+export function auditMaintenance(data) {
+  return request({
+    url: '/battery/maintenance/audit',
+    method: 'post',
+    data
+  })
+}
+
 // 销售管理
 export function getSalesList(params) {
   return request({
@@ -112,6 +144,14 @@ export function getSalesList(params) {
 export function saveSales(data) {
   return request({
     url: '/battery/sales',
+    method: 'post',
+    data
+  })
+}
+
+export function auditSales(data) {
+  return request({
+    url: '/battery/sales/audit',
     method: 'post',
     data
   })

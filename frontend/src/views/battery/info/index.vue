@@ -17,6 +17,11 @@
           <span>{{ row.batteryId }}</span>
         </template>
       </el-table-column>
+      <el-table-column label="生产批次" prop="batchId" align="center" width="100">
+        <template #default="{ row }">
+          <span>{{ row.batchId || '-' }}</span>
+        </template>
+      </el-table-column>
       <el-table-column label="类型" prop="typeCode" align="center" />
       <el-table-column label="容量(kWh)" prop="capacity" align="center" />
       <el-table-column label="额定电压(V)" prop="voltage" align="center" />
@@ -28,7 +33,9 @@
       </el-table-column>
       <el-table-column label="状态" align="center">
         <template #default="{ row }">
-          <el-tag :type="row.status === 1 ? 'success' : 'info'">{{ row.status === 1 ? '正常' : '异常' }}</el-tag>
+          <el-tag :type="statusMap[row.status]?.type || 'info'">
+            {{ statusMap[row.status]?.text || '未知' }}
+          </el-tag>
         </template>
       </el-table-column>
       <el-table-column label="操作" align="center" width="230" class-name="small-padding fixed-width">
@@ -52,6 +59,12 @@
         <el-form-item label="电池ID" prop="batteryId">
           <el-input v-model="temp.batteryId" :disabled="dialogStatus === 'update'" />
         </el-form-item>
+        <el-form-item label="生产批次" prop="batchId">
+          <el-select v-model="temp.batchId" placeholder="选择批次 (可选)" clearable filterable>
+            <el-option v-for="item in batchOptions" :key="item.batchId"
+              :label="item.batchNo + ' (ID:' + item.batchId + ')'" :value="item.batchId" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="类型" prop="typeCode">
           <el-select v-model="temp.typeCode" placeholder="请选择">
             <el-option label="三元锂" value="NCM" />
@@ -70,12 +83,6 @@
         <el-form-item label="生产日期" prop="produceDate">
           <el-date-picker v-model="temp.produceDate" type="date" placeholder="选择日期" value-format="YYYY-MM-DD" />
         </el-form-item>
-        <el-form-item label="状态" prop="status">
-          <el-radio-group v-model="temp.status">
-            <el-radio :label="1">正常</el-radio>
-            <el-radio :label="0">异常</el-radio>
-          </el-radio-group>
-        </el-form-item>
       </el-form>
       <template #footer>
         <div class="dialog-footer">
@@ -93,27 +100,40 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { getBatteryList, saveBattery, updateBattery, deleteBattery } from '@/api/battery'
+import { getBatteryList, saveBattery, updateBattery, deleteBattery, getBatchList } from '@/api/battery'
 import Pagination from '@/components/Pagination/index.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const list = ref([])
 const total = ref(0)
 const listLoading = ref(true)
+const batchOptions = ref([]) // 生产批次选项
+
 const listQuery = reactive({
   pageNum: 1,
   pageSize: 10,
-  batteryId: ''
+  batteryId: undefined
 })
+
+const statusMap = {
+  6: { text: '待生产', type: 'info' },
+  0: { text: '生产中', type: 'primary' },
+  1: { text: '已上架', type: 'success' },
+  2: { text: '已废弃', type: 'danger' },
+  3: { text: '待质检', type: 'warning' },
+  4: { text: '已销售', type: 'success' },
+  5: { text: '生产结束', type: 'info' }
+}
 
 const temp = reactive({
   batteryId: '',
+  batchId: undefined,
   typeCode: '',
   capacity: '',
   voltage: '',
   manufacturer: '',
   produceDate: '',
-  status: 1
+  status: 6
 })
 
 const dialogFormVisible = ref(false)
@@ -130,6 +150,12 @@ const rules = {
 
 const getList = () => {
   listLoading.value = true
+  // 同时获取批次列表，供下拉框使用
+  getBatchList({ pageNum: 1, pageSize: 100 }).then(res => {
+    const data = res.data || res
+    batchOptions.value = data.records || []
+  })
+
   getBatteryList(listQuery).then(response => {
     // 兼容不同的响应结构
     const pageData = response.data || response
@@ -154,12 +180,13 @@ const handleFilter = () => {
 
 const resetTemp = () => {
   temp.batteryId = ''
+  temp.batchId = undefined
   temp.typeCode = 'NCM'
   temp.capacity = ''
   temp.voltage = ''
   temp.manufacturer = ''
   temp.produceDate = new Date().toISOString().split('T')[0]
-  temp.status = 1
+  temp.status = 6 // 默认待生产
 }
 
 const handleCreate = () => {
