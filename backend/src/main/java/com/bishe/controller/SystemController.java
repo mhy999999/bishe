@@ -349,6 +349,46 @@ public class SystemController {
         return Result.success(sysUserService.updateById(sysUser));
     }
 
+    @PutMapping("/user/{id}/password")
+    public Result<Boolean> resetUserPassword(@PathVariable Long id,
+                                            @RequestBody java.util.Map<String, String> body,
+                                            HttpServletRequest request) {
+        if (!isAdmin(getCurrentUserId(request))) {
+            return forbidden();
+        }
+        if (id == null) {
+            return Result.error(400, "用户ID不能为空");
+        }
+        SysUser user = sysUserService.getById(id);
+        if (user == null) {
+            return Result.error("用户不存在");
+        }
+        String password = body == null ? null : body.get("password");
+        if (!StringUtils.hasText(password)) {
+            return Result.error(400, "密码不能为空");
+        }
+        SysUser toUpdate = new SysUser();
+        toUpdate.setUserId(id);
+        toUpdate.setPassword(hashPassword(password));
+        toUpdate.setUpdateTime(java.time.LocalDateTime.now());
+        return Result.success(sysUserService.updateById(toUpdate));
+    }
+
+    @GetMapping("/user/{id}/password")
+    public Result<String> getUserPassword(@PathVariable Long id, HttpServletRequest request) {
+        if (!isAdmin(getCurrentUserId(request))) {
+            return forbidden();
+        }
+        if (id == null) {
+            return Result.error(400, "用户ID不能为空");
+        }
+        SysUser user = sysUserService.getById(id);
+        if (user == null) {
+            return Result.error("用户不存在");
+        }
+        return Result.success(user.getPassword());
+    }
+
     @DeleteMapping("/user/{id}")
     @Transactional(rollbackFor = Exception.class)
     public Result<Boolean> removeUser(@PathVariable Long id, HttpServletRequest request) {

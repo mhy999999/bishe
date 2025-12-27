@@ -24,6 +24,21 @@ export function updateUser(data) {
   })
 }
 
+export function resetUserPassword(id, password) {
+  return request({
+    url: '/system/user/' + id + '/password',
+    method: 'put',
+    data: { password }
+  })
+}
+
+export function getUserPassword(id) {
+  return request({
+    url: '/system/user/' + id + '/password',
+    method: 'get'
+  })
+}
+
 export function deleteUser(id) {
   return request({
     url: '/system/user/' + id,
