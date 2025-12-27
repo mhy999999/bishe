@@ -27,6 +27,8 @@ public class TraceabilityController {
     private IMaintenanceRecordService maintenanceService;
     @Autowired
     private IVehicleInfoService vehicleService;
+    @Autowired
+    private ISalesRecordService salesService;
 
     // ==================== 流转记录 (BatteryTransferRecord) ====================
 
@@ -97,6 +99,19 @@ public class TraceabilityController {
     @PostMapping("/maintenance")
     public Result<Boolean> saveMaintenance(@RequestBody MaintenanceRecord record) {
         return Result.success(maintenanceService.save(record));
+    }
+
+    // ==================== 销售记录 (SalesRecord) ====================
+
+    @GetMapping("/sales/list")
+    public Result<Page<SalesRecord>> listSales(@RequestParam(defaultValue = "1") Integer pageNum,
+                                               @RequestParam(defaultValue = "10") Integer pageSize,
+                                               @RequestParam(required = false) String batteryId) {
+        Page<SalesRecord> page = new Page<>(pageNum, pageSize);
+        LambdaQueryWrapper<SalesRecord> wrapper = new LambdaQueryWrapper<>();
+        wrapper.like(StringUtils.hasText(batteryId), SalesRecord::getBatteryId, batteryId);
+        wrapper.orderByDesc(SalesRecord::getSalesDate);
+        return Result.success(salesService.page(page, wrapper));
     }
 
     // ==================== 车辆信息 (VehicleInfo) ====================

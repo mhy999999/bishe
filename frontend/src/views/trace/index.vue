@@ -1,124 +1,202 @@
 <template>
   <div class="app-container">
-    <div class="filter-container">
-      <el-input v-model="listQuery.txHash" placeholder="交易哈希 (TxHash)" style="width: 300px;" class="filter-item"
-        @keyup.enter="handleFilter" />
-      <el-button class="filter-item" type="primary" icon="Search" @click="handleFilter">
-        搜索交易
-      </el-button>
-    </div>
+    <el-tabs v-model="activeTab">
+      <el-tab-pane label="按电池ID溯源" name="battery">
+        <div class="filter-container">
+          <el-input v-model="batteryQuery.batteryIdInput" placeholder="输入电池ID" style="width: 220px;" class="filter-item"
+            @keyup.enter="handleBatteryFilter" />
+          <el-select v-model="batteryQuery.batteryId" clearable filterable placeholder="选择电池ID"
+            style="width: 220px; margin-left: 10px;" class="filter-item" @change="handleBatteryFilter">
+            <el-option v-for="item in batteryOptions" :key="item.batteryId" :label="item.batteryId"
+              :value="item.batteryId" />
+          </el-select>
+          <el-button class="filter-item" type="primary" icon="Search" @click="handleBatteryFilter">
+            查询溯源
+          </el-button>
+        </div>
 
-    <el-table v-loading="listLoading" :data="list" border fit highlight-current-row style="width: 100%;">
-      <el-table-column label="交易哈希" prop="txHash" align="center" width="220">
-        <template #default="{ row }">
-          <el-tooltip :content="row.txHash" placement="top">
-            <span class="link-type">{{ row.txHash?.substring(0, 18) }}...</span>
-          </el-tooltip>
-        </template>
-      </el-table-column>
-      <el-table-column label="区块序号" prop="blockHeight" align="center" width="120">
-        <template #header>
-          <span>区块序号</span>
-          <el-tooltip content="交易被打包进区块链的第几个区块，可理解为上链顺序" placement="top">
-            <el-icon class="help-icon">
-              <InfoFilled />
-            </el-icon>
-          </el-tooltip>
-        </template>
-        <template #default="{ row }">
-          <el-tooltip :content="'第' + row.blockHeight + '个区块（上链顺序）'" placement="top">
-            <el-tag type="info">#{{ row.blockHeight }}</el-tag>
-          </el-tooltip>
-        </template>
-      </el-table-column>
-      <el-table-column label="调用方法" prop="methodName" align="center" width="150" />
-      <el-table-column label="上链参数 (Params)" prop="params" align="center">
-        <template #default="{ row }">
-          <el-popover placement="top-start" title="上链参数" :width="520" trigger="hover">
-            <template #reference>
-              <span class="params-summary">{{ getParamsSummary(row) }}</span>
+        <el-table v-loading="traceLoading" :data="traceEvents" border fit highlight-current-row style="width: 100%;">
+          <el-table-column label="时间" prop="timeText" align="center" width="180" />
+          <el-table-column label="事件" prop="typeText" align="center" width="120">
+            <template #default="{ row }">
+              <el-tag :type="row.typeTag || 'info'">{{ row.typeText }}</el-tag>
             </template>
-            <div class="params-popover">
-              <div class="params-actions">
-                <el-button link type="primary" size="small" @click="copyText(row.params)">复制原始JSON</el-button>
-              </div>
-              <el-descriptions v-if="getParamItems(row).length" :column="1" border size="small">
-                <el-descriptions-item v-for="item in getParamItems(row)" :key="item.key" :label="item.label">
-                  <el-tag v-if="item.tag" :type="item.tag.type" size="small">{{ item.tag.text }}</el-tag>
-                  <span v-else>{{ item.text }}</span>
-                </el-descriptions-item>
-              </el-descriptions>
-              <pre v-else class="params-raw">{{ formatJson(row.params) }}</pre>
-            </div>
-          </el-popover>
-        </template>
-      </el-table-column>
-      <el-table-column label="合约地址" prop="contractAddr" align="center" width="150">
-        <template #default="{ row }">
-          <el-tooltip :content="row.contractAddr" placement="top">
-            <span>{{ row.contractAddr?.substring(0, 10) }}...</span>
-          </el-tooltip>
-        </template>
-      </el-table-column>
-      <el-table-column label="状态" prop="status" align="center" width="100">
-        <template #default="{ row }">
-          <el-tag :type="row.status === 1 ? 'success' : 'danger'">
-            {{ row.status === 1 ? '成功' : '失败' }}
-          </el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column label="上链时间" prop="createTime" align="center" width="180">
-        <template #default="{ row }">
-          <span>{{ row.createTime?.replace('T', ' ') }}</span>
-        </template>
-      </el-table-column>
-    </el-table>
+          </el-table-column>
+          <el-table-column label="内容" prop="content" align="left" />
+          <el-table-column label="TxHash" align="center" width="200">
+            <template #default="{ row }">
+              <template v-if="row.txHash">
+                <el-tooltip :content="row.txHash" placement="top" effect="light">
+                  <el-link type="primary" :underline="false" @click="openTxHash(row.txHash)">
+                    {{ row.txHash.substring(0, 10) + '...' }}
+                  </el-link>
+                </el-tooltip>
+              </template>
+              <span v-else>-</span>
+            </template>
+          </el-table-column>
+        </el-table>
+      </el-tab-pane>
 
-    <pagination v-show="total > 0" :total="total" v-model:page="listQuery.pageNum" v-model:limit="listQuery.pageSize"
-      @pagination="getList" />
+      <el-tab-pane label="按交易查询" name="tx">
+        <div class="filter-container">
+          <el-input v-model="chainQuery.txHash" placeholder="交易哈希 (TxHash)" style="width: 300px;" class="filter-item"
+            @keyup.enter="handleTxFilter" />
+          <el-button class="filter-item" type="primary" icon="Search" @click="handleTxFilter">
+            搜索交易
+          </el-button>
+        </div>
+
+        <el-table v-loading="chainLoading" :data="chainList" border fit highlight-current-row style="width: 100%;">
+          <el-table-column label="交易哈希" prop="txHash" align="center" width="220">
+            <template #default="{ row }">
+              <el-tooltip :content="row.txHash" placement="top">
+                <span class="link-type">{{ row.txHash?.substring(0, 18) }}...</span>
+              </el-tooltip>
+            </template>
+          </el-table-column>
+          <el-table-column label="区块序号" prop="blockHeight" align="center" width="120">
+            <template #header>
+              <span>区块序号</span>
+              <el-tooltip content="交易被打包进区块链的第几个区块，可理解为上链顺序" placement="top">
+                <el-icon class="help-icon">
+                  <InfoFilled />
+                </el-icon>
+              </el-tooltip>
+            </template>
+            <template #default="{ row }">
+              <el-tooltip :content="'第' + row.blockHeight + '个区块（上链顺序）'" placement="top">
+                <el-tag type="info">#{{ row.blockHeight }}</el-tag>
+              </el-tooltip>
+            </template>
+          </el-table-column>
+          <el-table-column label="调用方法" prop="methodName" align="center" width="150" />
+          <el-table-column label="上链参数 (Params)" prop="params" align="center">
+            <template #default="{ row }">
+              <el-popover placement="top-start" title="上链参数" :width="520" trigger="hover">
+                <template #reference>
+                  <span class="params-summary">{{ getParamsSummary(row) }}</span>
+                </template>
+                <div class="params-popover">
+                  <div class="params-actions">
+                    <el-button link type="primary" size="small" @click="copyText(row.params)">复制原始JSON</el-button>
+                  </div>
+                  <el-descriptions v-if="getParamItems(row).length" :column="1" border size="small">
+                    <el-descriptions-item v-for="item in getParamItems(row)" :key="item.key" :label="item.label">
+                      <el-tag v-if="item.tag" :type="item.tag.type" size="small">{{ item.tag.text }}</el-tag>
+                      <span v-else>{{ item.text }}</span>
+                    </el-descriptions-item>
+                  </el-descriptions>
+                  <pre v-else class="params-raw">{{ formatJson(row.params) }}</pre>
+                </div>
+              </el-popover>
+            </template>
+          </el-table-column>
+          <el-table-column label="合约地址" prop="contractAddr" align="center" width="150">
+            <template #default="{ row }">
+              <el-tooltip :content="row.contractAddr" placement="top">
+                <span>{{ row.contractAddr?.substring(0, 10) }}...</span>
+              </el-tooltip>
+            </template>
+          </el-table-column>
+          <el-table-column label="状态" prop="status" align="center" width="100">
+            <template #default="{ row }">
+              <el-tag :type="row.status === 1 ? 'success' : 'danger'">
+                {{ row.status === 1 ? '成功' : '失败' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="上链时间" prop="createTime" align="center" width="180">
+            <template #default="{ row }">
+              <span>{{ row.createTime?.replace('T', ' ') }}</span>
+            </template>
+          </el-table-column>
+        </el-table>
+
+        <pagination v-show="chainTotal > 0" :total="chainTotal" v-model:page="chainQuery.pageNum"
+          v-model:limit="chainQuery.pageSize" @pagination="getChainTxList" />
+      </el-tab-pane>
+    </el-tabs>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted, watch } from 'vue'
-import { useRoute } from 'vue-router'
-import { getChainList } from '@/api/trace'
+import { useRoute, useRouter } from 'vue-router'
+import { getBatteryList } from '@/api/battery'
+import { getChainList, getMaintenanceList, getRecyclingList, getSalesList, getTransferList } from '@/api/trace'
 import Pagination from '@/components/Pagination/index.vue'
 import { ElMessage } from 'element-plus'
 import { InfoFilled } from '@element-plus/icons-vue'
 
 const route = useRoute()
-const list = ref([])
-const total = ref(0)
-const listLoading = ref(true)
-const listQuery = reactive({
+const router = useRouter()
+
+const activeTab = ref('battery')
+
+const chainList = ref([])
+const chainTotal = ref(0)
+const chainLoading = ref(true)
+const chainQuery = reactive({
   pageNum: 1,
   pageSize: 10,
   txHash: undefined
 })
 
-const getList = () => {
-  listLoading.value = true
-  getChainList(listQuery).then(response => {
-    const pageData = response.data || response
-    if (pageData) {
-      list.value = pageData.records || []
-      total.value = pageData.total || 0
-    } else {
-      list.value = []
-      total.value = 0
-    }
-    listLoading.value = false
+const batteryOptions = ref([])
+const batteryQuery = reactive({
+  batteryId: undefined,
+  batteryIdInput: ''
+})
+const traceEvents = ref([])
+const traceLoading = ref(false)
+
+const resolveBatteryId = () => {
+  const fromInput = String(batteryQuery.batteryIdInput || '').trim()
+  if (fromInput) return fromInput
+  const fromSelect = batteryQuery.batteryId
+  const value = String(fromSelect || '').trim()
+  return value || undefined
+}
+
+const loadBatteryOptions = () => {
+  return getBatteryList({
+    pageNum: 1,
+    pageSize: 1000
+  }).then(res => {
+    const pageData = res?.data || res
+    batteryOptions.value = pageData?.records || []
   }).catch(() => {
-    list.value = []
-    total.value = 0
-    listLoading.value = false
+    batteryOptions.value = []
   })
 }
 
-const handleFilter = () => {
-  listQuery.pageNum = 1
-  getList()
+const getChainTxList = () => {
+  chainLoading.value = true
+  getChainList(chainQuery).then(response => {
+    const pageData = response.data || response
+    if (pageData) {
+      chainList.value = pageData.records || []
+      chainTotal.value = pageData.total || 0
+    } else {
+      chainList.value = []
+      chainTotal.value = 0
+    }
+    chainLoading.value = false
+  }).catch(() => {
+    chainList.value = []
+    chainTotal.value = 0
+    chainLoading.value = false
+  })
+}
+
+const handleTxFilter = () => {
+  chainQuery.pageNum = 1
+  const query = { ...route.query }
+  if (chainQuery.txHash) query.txHash = chainQuery.txHash
+  else delete query.txHash
+  delete query.batteryId
+  router.replace({ name: route.name, query })
 }
 
 const formatJson = (jsonStr) => {
@@ -255,19 +333,183 @@ const copyText = async (text) => {
   }
 }
 
-onMounted(() => {
-  if (route.query?.txHash) {
-    listQuery.txHash = route.query.txHash
+const parseToDate = (val) => {
+  if (!val) return null
+  if (val instanceof Date) return val
+  if (typeof val === 'number') return new Date(val)
+  if (typeof val === 'string') {
+    const ts = Number(val)
+    if (Number.isFinite(ts)) return new Date(ts)
+    const d = new Date(val.replace('T', ' '))
+    return Number.isNaN(d.getTime()) ? null : d
   }
-  getList()
+  return null
+}
+
+const sortByTimeAsc = (a, b) => {
+  const t1 = a?.time ? a.time.getTime() : 0
+  const t2 = b?.time ? b.time.getTime() : 0
+  return t1 - t2
+}
+
+const buildTraceEvents = ({ transfers, sales, maintenance, recycling }) => {
+  const events = []
+
+    ; (transfers || []).forEach(r => {
+      const time = parseToDate(r.createTime)
+      const content = `类型：${r.actionType || '-'}，原拥有者：${r.fromOwner ?? '-'}，新拥有者：${r.toOwner ?? '-'}`
+      events.push({
+        time,
+        timeText: time ? formatDateTime(time) : '',
+        typeText: '流转',
+        typeTag: 'info',
+        content,
+        txHash: r.txHash || ''
+      })
+    })
+
+    ; (sales || []).forEach(r => {
+      const time = parseToDate(r.salesDate)
+      const price = r.salesPrice != null ? String(r.salesPrice) : '-'
+      const content = `买家：${r.buyerName || '-'}，售价：${price}，销售员：${r.salesPerson || '-'}`
+      events.push({
+        time,
+        timeText: time ? formatDateTime(time) : '',
+        typeText: '销售',
+        typeTag: 'success',
+        content,
+        txHash: r.txHash || ''
+      })
+    })
+
+    ; (maintenance || []).forEach(r => {
+      const time = parseToDate(r.createTime)
+      const content = `故障：${r.faultType || '-'}，维修人：${r.maintainer || '-'}，内容：${r.description || '-'}`
+      events.push({
+        time,
+        timeText: time ? formatDateTime(time) : '',
+        typeText: '维修',
+        typeTag: 'warning',
+        content,
+        txHash: r.txHash || ''
+      })
+    })
+
+    ; (recycling || []).forEach(r => {
+      const time = parseToDate(r.createTime)
+      const value = r.residualValue != null ? String(r.residualValue) : '-'
+      const content = `外观：${r.appearance || '-'}，残值：${value}，建议：${r.suggestion || '-'}`
+      events.push({
+        time,
+        timeText: time ? formatDateTime(time) : '',
+        typeText: '回收',
+        typeTag: 'danger',
+        content,
+        txHash: r.dataHash || ''
+      })
+    })
+
+  events.sort(sortByTimeAsc)
+  return events
+}
+
+const fetchTraceByBatteryId = (batteryId) => {
+  const id = String(batteryId || '').trim()
+  if (!id) {
+    traceEvents.value = []
+    return Promise.resolve()
+  }
+  traceLoading.value = true
+  return Promise.all([
+    getTransferList({ pageNum: 1, pageSize: 1000, batteryId: id }),
+    getSalesList({ pageNum: 1, pageSize: 1000, batteryId: id }),
+    getMaintenanceList({ pageNum: 1, pageSize: 1000, batteryId: id }),
+    getRecyclingList({ pageNum: 1, pageSize: 1000, batteryId: id })
+  ]).then(([tRes, sRes, mRes, rRes]) => {
+    const tPage = tRes?.data || tRes
+    const sPage = sRes?.data || sRes
+    const mPage = mRes?.data || mRes
+    const rPage = rRes?.data || rRes
+    traceEvents.value = buildTraceEvents({
+      transfers: tPage?.records || [],
+      sales: sPage?.records || [],
+      maintenance: mPage?.records || [],
+      recycling: rPage?.records || []
+    })
+    traceLoading.value = false
+  }).catch(() => {
+    traceEvents.value = []
+    traceLoading.value = false
+  })
+}
+
+const handleBatteryFilter = () => {
+  const id = resolveBatteryId()
+  const input = String(batteryQuery.batteryIdInput || '').trim()
+  if (input && batteryQuery.batteryId && String(batteryQuery.batteryId) !== input) {
+    batteryQuery.batteryId = undefined
+  }
+  if (batteryQuery.batteryId) {
+    batteryQuery.batteryIdInput = String(batteryQuery.batteryId || '')
+  } else {
+    batteryQuery.batteryIdInput = id || ''
+  }
+  const query = { ...route.query }
+  if (id) query.batteryId = id
+  else delete query.batteryId
+  delete query.txHash
+  router.replace({ name: route.name, query })
+}
+
+const openTxHash = (txHash) => {
+  const hash = String(txHash || '').trim()
+  if (!hash) return
+  activeTab.value = 'tx'
+  router.push({ name: route.name, query: { txHash: hash } })
+}
+
+onMounted(() => {
+  if (route.query?.batteryId) {
+    activeTab.value = 'battery'
+    batteryQuery.batteryId = undefined
+    batteryQuery.batteryIdInput = String(route.query.batteryId || '')
+  } else if (route.query?.txHash) {
+    activeTab.value = 'tx'
+    chainQuery.txHash = route.query.txHash
+  }
+  loadBatteryOptions()
+  if (activeTab.value === 'tx') {
+    getChainTxList()
+  } else {
+    const id = resolveBatteryId()
+    if (id) fetchTraceByBatteryId(id)
+  }
 })
 
 watch(
   () => route.query?.txHash,
   (txHash) => {
-    listQuery.txHash = txHash || undefined
-    listQuery.pageNum = 1
-    getList()
+    if (!txHash) return
+    activeTab.value = 'tx'
+    chainQuery.txHash = txHash || undefined
+    chainQuery.pageNum = 1
+    getChainTxList()
+  }
+)
+
+watch(
+  () => route.query?.batteryId,
+  (batteryId) => {
+    if (!batteryId) {
+      batteryQuery.batteryId = undefined
+      batteryQuery.batteryIdInput = ''
+      traceEvents.value = []
+      return
+    }
+    activeTab.value = 'battery'
+    batteryQuery.batteryIdInput = String(batteryId || '')
+    batteryQuery.batteryId = undefined
+    fetchTraceByBatteryId(String(batteryId || ''))
   }
 )
 </script>

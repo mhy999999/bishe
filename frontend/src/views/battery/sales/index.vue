@@ -26,6 +26,18 @@
           <span>{{ row.salesDate?.replace('T', ' ') }}</span>
         </template>
       </el-table-column>
+      <el-table-column label="上链哈希" align="center" width="200">
+        <template #default="{ row }">
+          <template v-if="row.txHash">
+            <el-tooltip :content="row.txHash" placement="top" effect="light">
+              <el-link type="primary" :underline="false" @click.stop="openTxHash(row.txHash)">
+                {{ row.txHash.substring(0, 10) + '...' }}
+              </el-link>
+            </el-tooltip>
+          </template>
+          <span v-else>未上链</span>
+        </template>
+      </el-table-column>
       <el-table-column label="状态" align="center">
         <template #default="{ row }">
           <el-tag :type="statusMap[row.status]?.type || 'info'">
@@ -206,6 +218,10 @@ const openMaterialPreview = (rawUrl) => {
     name: 'SalesMaterialPreview',
     query: { url: String(rawUrl || ''), from: router.currentRoute.value.fullPath }
   })
+}
+
+const openTxHash = (txHash) => {
+  router.push({ name: 'Trace', query: { txHash: String(txHash || '') } })
 }
 
 const syncMaterialFileList = () => {

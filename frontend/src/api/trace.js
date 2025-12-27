@@ -60,6 +60,15 @@ export function saveMaintenance(data) {
   })
 }
 
+// 销售记录
+export function getSalesList(params) {
+  return request({
+    url: '/trace/sales/list',
+    method: 'get',
+    params
+  })
+}
+
 // 车辆信息 (绑定)
 export function getVehicleList(params) {
   return request({

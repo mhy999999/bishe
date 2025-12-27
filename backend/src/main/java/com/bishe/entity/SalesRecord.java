@@ -23,4 +23,5 @@ public class SalesRecord {
     private String auditOpinion;
     private String materialDesc;
     private String materialUrl;
+    private String txHash;
 }

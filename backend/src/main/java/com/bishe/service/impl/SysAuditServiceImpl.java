@@ -1,5 +1,6 @@
 package com.bishe.service.impl;
 
+import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.bishe.entity.BatteryInfo;
@@ -9,6 +10,7 @@ import com.bishe.entity.SalesRecord;
 import com.bishe.entity.SysAudit;
 import com.bishe.mapper.SysAuditMapper;
 import com.bishe.service.IBatteryInfoService;
+import com.bishe.service.IChainTransactionService;
 import com.bishe.service.IMaintenanceRecordService;
 import com.bishe.service.IQualityInspectionService;
 import com.bishe.service.ISalesRecordService;
@@ -30,6 +32,8 @@ public class SysAuditServiceImpl extends ServiceImpl<SysAuditMapper, SysAudit> i
     private ISalesRecordService salesRecordService;
     @Autowired
     private IBatteryInfoService batteryInfoService;
+    @Autowired
+    private IChainTransactionService chainService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -100,6 +104,25 @@ public class SysAuditServiceImpl extends ServiceImpl<SysAuditMapper, SysAudit> i
             update.setSalesId(Long.parseLong(businessId));
             update.setStatus(status);
             update.setAuditOpinion(auditOpinion);
+
+            if (status == 1 && sales != null && sales.getBatteryId() != null) {
+                String existingHash = sales.getTxHash();
+                if (existingHash == null || existingHash.trim().isEmpty()) {
+                    SalesRecord chainData = new SalesRecord();
+                    chainData.setSalesId(sales.getSalesId());
+                    chainData.setBatteryId(sales.getBatteryId());
+                    chainData.setBuyerName(sales.getBuyerName());
+                    chainData.setSalesPrice(sales.getSalesPrice());
+                    chainData.setSalesDate(sales.getSalesDate());
+                    chainData.setSalesPerson(sales.getSalesPerson());
+                    chainData.setStatus(status);
+                    chainData.setAuditOpinion(auditOpinion);
+                    chainData.setMaterialDesc(sales.getMaterialDesc());
+                    chainData.setMaterialUrl(sales.getMaterialUrl());
+                    String txHash = chainService.submitTransaction("recordSales", JSONUtil.toJsonStr(chainData));
+                    update.setTxHash(txHash);
+                }
+            }
             salesRecordService.updateById(update);
 
             // 更新电池状态
