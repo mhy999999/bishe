@@ -165,6 +165,13 @@ export function auditSales(data) {
   })
 }
 
+export function cancelSales(salesId) {
+  return request({
+    url: '/battery/sales/cancel/' + salesId,
+    method: 'post'
+  })
+}
+
 export function uploadSalesMaterial(data) {
   return request({
     url: '/battery/sales/material/upload',

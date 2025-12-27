@@ -46,12 +46,13 @@
           <span v-else>-</span>
         </template>
       </el-table-column>
-      <el-table-column label="操作" align="center" width="120">
+      <el-table-column label="操作" align="center" width="200">
         <template #default="{ row }">
-          <el-button v-if="row.status === 2" type="primary" size="small" @click="handleResubmit(row)">
-            重新提交
-          </el-button>
-          <span v-else>-</span>
+          <template v-if="row.status === 2">
+            <el-button type="primary" size="small" @click="handleResubmit(row)">重新提交</el-button>
+            <el-button type="danger" size="small" @click="handleCancel(row)">取消订单</el-button>
+          </template>
+          <span v-else>-</span> 
         </template>
       </el-table-column>
     </el-table>
@@ -98,9 +99,9 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { getSalesList, saveSales, updateSales, getBatteryList, uploadSalesMaterial } from '@/api/battery'
+import { getSalesList, saveSales, updateSales, getBatteryList, uploadSalesMaterial, cancelSales } from '@/api/battery'
 import Pagination from '@/components/Pagination/index.vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/store/user'
 import { useRouter } from 'vue-router'
 
@@ -120,7 +121,8 @@ const listQuery = reactive({
 const statusMap = {
   0: { text: '待审核', type: 'warning' },
   1: { text: '已通过', type: 'success' },
-  2: { text: '已驳回', type: 'danger' }
+  2: { text: '已驳回', type: 'danger' },
+  3: { text: '已取消', type: 'info' }
 }
 
 const dialogFormVisible = ref(false)
@@ -277,6 +279,23 @@ const handleResubmit = async (row) => {
   syncMaterialFileList()
   await loadSellableBatteries()
   dialogFormVisible.value = true
+}
+
+const handleCancel = (row) => {
+  const id = row?.salesId
+  if (!id) return
+  ElMessageBox.confirm(`确认取消销售订单 ${id} 吗？`, '提示', {
+    confirmButtonText: '确认',
+    cancelButtonText: '取消',
+    type: 'warning'
+  }).then(() => {
+    cancelSales(id).then(() => {
+      ElMessage.success('已取消')
+      getList()
+    }).catch((err) => {
+      console.error(err)
+    })
+  }).catch(() => {})
 }
 
 const submitData = () => {

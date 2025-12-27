@@ -670,6 +670,9 @@ public class BatteryBusinessController {
         if (existing.getStatus() != null && existing.getStatus() == 1 && !hasAnyRole(userId, "admin")) {
             return Result.error(403, "已通过记录不允许修改");
         }
+        if (existing.getStatus() != null && existing.getStatus() == 3) {
+            return Result.error(403, "已取消记录不允许修改");
+        }
         String batteryIdToUse = StringUtils.hasText(record.getBatteryId()) ? record.getBatteryId() : existing.getBatteryId();
         if (!StringUtils.hasText(batteryIdToUse)) {
             return Result.error(400, "电池ID不能为空");
@@ -732,6 +735,37 @@ public class BatteryBusinessController {
             sysAuditService.submitAudit("SALES", record.getSalesId().toString(), salesPersonToUse);
         }
         return Result.success(success);
+    }
+
+    @PostMapping("/sales/cancel/{salesId}")
+    public Result<Boolean> cancelSales(@PathVariable("salesId") Long salesId, HttpServletRequest request) {
+        Long userId = getCurrentUserId(request);
+        if (!hasAnyRole(userId, "admin", "sales", "dealer")) {
+            return forbidden();
+        }
+        if (salesId == null) {
+            return Result.error(400, "销售ID不能为空");
+        }
+        SalesRecord existing = salesRecordService.getById(salesId);
+        if (existing == null) {
+            return Result.error("记录不存在");
+        }
+        if (existing.getStatus() == null || existing.getStatus() != 2) {
+            return Result.error(400, "仅允许取消已驳回的销售记录");
+        }
+
+        LambdaQueryWrapper<SysAudit> pendingAuditQuery = new LambdaQueryWrapper<>();
+        pendingAuditQuery.eq(SysAudit::getBusinessType, "SALES");
+        pendingAuditQuery.eq(SysAudit::getBusinessId, salesId.toString());
+        pendingAuditQuery.eq(SysAudit::getStatus, 0);
+        if (sysAuditService.count(pendingAuditQuery) > 0) {
+            return Result.error(400, "记录处于待审核状态，无法取消");
+        }
+
+        SalesRecord update = new SalesRecord();
+        update.setSalesId(salesId);
+        update.setStatus(3);
+        return Result.success(salesRecordService.updateById(update));
     }
 
     @PostMapping("/sales/material/upload")
