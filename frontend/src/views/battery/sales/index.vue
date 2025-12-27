@@ -52,7 +52,7 @@
             <el-button type="primary" size="small" @click="handleResubmit(row)">重新提交</el-button>
             <el-button type="danger" size="small" @click="handleCancel(row)">取消订单</el-button>
           </template>
-          <span v-else>-</span> 
+          <span v-else>-</span>
         </template>
       </el-table-column>
     </el-table>
@@ -63,8 +63,10 @@
     <el-dialog :title="dialogMode === 'create' ? '新增销售记录' : '重新提交销售记录'" v-model="dialogFormVisible">
       <el-form ref="dataForm" :model="temp" :rules="rules" label-width="100px">
         <el-form-item label="电池ID" prop="batteryId">
-          <el-select v-model="temp.batteryId" filterable placeholder="请选择电池ID" :loading="batteryLoading" style="width: 100%;">
-            <el-option v-for="item in batteryOptions" :key="item.batteryId" :label="item.batteryId" :value="item.batteryId" />
+          <el-select v-model="temp.batteryId" filterable placeholder="请选择电池ID" :loading="batteryLoading"
+            style="width: 100%;">
+            <el-option v-for="item in batteryOptions" :key="item.batteryId" :label="item.batteryId"
+              :value="item.batteryId" />
           </el-select>
         </el-form-item>
         <el-form-item label="买家姓名" prop="buyerName">
@@ -80,8 +82,8 @@
           <el-input v-model="temp.materialDesc" type="textarea" :rows="3" />
         </el-form-item>
         <el-form-item label="材料文件">
-          <el-upload v-model:file-list="materialFileList" :http-request="handleMaterialUpload" :on-remove="handleMaterialRemove"
-            :limit="5">
+          <el-upload v-model:file-list="materialFileList" :http-request="handleMaterialUpload"
+            :on-remove="handleMaterialRemove" multiple :limit="3" :on-exceed="handleMaterialExceed">
             <el-button type="primary">上传文件</el-button>
           </el-upload>
         </el-form-item>
@@ -214,10 +216,24 @@ const syncMaterialFileList = () => {
   }))
 }
 
+const handleMaterialExceed = () => {
+  ElMessage.warning('材料文件最多上传 3 个')
+}
+
 const handleMaterialUpload = (options) => {
+  if (materialUrls.value.length >= 3) {
+    ElMessage.warning('材料文件最多上传 3 个')
+    options.onError && options.onError(new Error('材料文件数量超限'))
+    return
+  }
   const formData = new FormData()
   formData.append('file', options.file)
   uploadSalesMaterial(formData).then((url) => {
+    if (materialUrls.value.length >= 3) {
+      ElMessage.warning('材料文件最多上传 3 个')
+      options.onError && options.onError(new Error('材料文件数量超限'))
+      return
+    }
     materialUrls.value.push(url)
     syncMaterialFileList()
     options.onSuccess && options.onSuccess({ url }, options.file)
@@ -295,7 +311,7 @@ const handleCancel = (row) => {
     }).catch((err) => {
       console.error(err)
     })
-  }).catch(() => {})
+  }).catch(() => { })
 }
 
 const submitData = () => {

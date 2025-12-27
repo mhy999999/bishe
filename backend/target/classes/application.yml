@@ -6,6 +6,10 @@ server:
 spring:
   application:
     name: bishe-backend
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 30MB
   profiles:
     active: dev
   datasource:
