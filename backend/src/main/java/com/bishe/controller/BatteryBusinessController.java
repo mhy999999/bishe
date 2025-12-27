@@ -6,12 +6,15 @@ import com.bishe.common.Result;
 import com.bishe.entity.*;
 import com.bishe.service.*;
 import jakarta.servlet.http.HttpServletRequest;
+import org.apache.poi.hwpf.HWPFDocument;
+import org.apache.poi.hwpf.extractor.WordExtractor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.util.StringUtils;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.InputStream;
 import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -758,6 +761,57 @@ public class BatteryBusinessController {
             return Result.success(url);
         } catch (Exception e) {
             return Result.error(500, "上传失败");
+        }
+    }
+
+    @GetMapping("/sales/material/preview/doc")
+    public Result<String> previewSalesMaterialDoc(@RequestParam("url") String url, HttpServletRequest request) {
+        Long userId = getCurrentUserId(request);
+        if (!hasAnyRole(userId, "admin", "sales", "dealer")) {
+            return forbidden();
+        }
+        if (!StringUtils.hasText(url)) {
+            return Result.error(400, "文件地址不能为空");
+        }
+        String text = url.trim();
+        int qIndex = text.indexOf('?');
+        if (qIndex >= 0) {
+            text = text.substring(0, qIndex);
+        }
+        int marker = text.indexOf("/files/sales/");
+        String fileName = marker >= 0 ? text.substring(marker + "/files/sales/".length()) : text;
+        if (fileName.startsWith("/")) {
+            fileName = fileName.substring(1);
+        }
+        if (!StringUtils.hasText(fileName)) {
+            return Result.error(400, "文件名不能为空");
+        }
+        if (fileName.contains("..") || fileName.contains("/") || fileName.contains("\\")) {
+            return Result.error(400, "非法文件路径");
+        }
+        if (!fileName.toLowerCase().endsWith(".doc")) {
+            return Result.error(400, "仅支持doc格式预览");
+        }
+
+        Path targetDir = Paths.get(System.getProperty("user.dir"), "uploads", "sales").normalize();
+        Path targetFile = targetDir.resolve(fileName).normalize();
+        if (!targetFile.startsWith(targetDir)) {
+            return Result.error(400, "非法文件路径");
+        }
+        if (!Files.exists(targetFile) || !Files.isRegularFile(targetFile)) {
+            return Result.error(404, "文件不存在");
+        }
+        try (InputStream in = Files.newInputStream(targetFile);
+             HWPFDocument doc = new HWPFDocument(in);
+             WordExtractor extractor = new WordExtractor(doc)) {
+            String content = extractor.getText();
+            if (content == null) {
+                content = "";
+            }
+            content = content.replace("\u0000", "");
+            return Result.success(content);
+        } catch (Exception e) {
+            return Result.error(500, "预览解析失败");
         }
     }
 }

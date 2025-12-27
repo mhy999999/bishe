@@ -28,8 +28,13 @@
       </el-card>
 
       <el-card v-else shadow="never" style="height: 100%;">
-        <template v-if="viewerType === 'text'">
+        <template v-if="viewerType === 'text' || viewerType === 'doc'">
           <pre style="white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size: 13px; line-height: 1.6; margin: 0;">{{ textContent }}</pre>
+        </template>
+        <template v-else-if="viewerType === 'markdown'">
+          <div style="height:100%; overflow:auto;">
+            <div v-html="markdownHtml" style="padding: 2px 2px 8px 2px;" />
+          </div>
         </template>
         <template v-else-if="viewerType === 'image'">
           <div style="width:100%; height:100%; overflow:auto; text-align:center;">
@@ -38,6 +43,21 @@
         </template>
         <template v-else-if="viewerType === 'pdf'">
           <iframe :src="resolvedUrl" style="width:100%; height:100%; border:0;" />
+        </template>
+        <template v-else-if="viewerType === 'docx'">
+          <div style="height:100%; overflow:auto;">
+            <div v-html="docxHtml" style="padding: 2px 2px 8px 2px;" />
+          </div>
+        </template>
+        <template v-else-if="viewerType === 'video'">
+          <div style="width:100%; height:100%; display:flex; align-items:center; justify-content:center;">
+            <video :src="resolvedUrl" controls style="max-width:100%; max-height:100%;" />
+          </div>
+        </template>
+        <template v-else-if="viewerType === 'audio'">
+          <div style="width:100%; height:100%; display:flex; align-items:center; justify-content:center;">
+            <audio :src="resolvedUrl" controls style="width: 100%; max-width: 720px;" />
+          </div>
         </template>
         <template v-else>
           <el-result icon="info" title="该文件类型暂不支持在线预览">
@@ -55,13 +75,20 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useUserStore } from '@/store/user'
+
+const contentCache = new Map()
+let activeController = null
 
 const route = useRoute()
 const router = useRouter()
+const userStore = useUserStore()
 
 const loading = ref(false)
 const error = ref('')
 const textContent = ref('')
+const markdownHtml = ref('')
+const docxHtml = ref('')
 
 const rawUrl = computed(() => {
   const q = route.query?.url
@@ -102,13 +129,26 @@ const ext = computed(() => {
 
 const viewerType = computed(() => {
   const e = ext.value
-  if (['txt', 'md', 'json', 'log', 'csv', 'xml', 'yml', 'yaml', 'ini', 'conf'].includes(e)) return 'text'
+  if (['md', 'markdown'].includes(e)) return 'markdown'
+  if (['txt', 'json', 'log', 'csv', 'xml', 'yml', 'yaml', 'ini', 'conf'].includes(e)) return 'text'
   if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'].includes(e)) return 'image'
   if (e === 'pdf') return 'pdf'
+  if (e === 'docx') return 'docx'
+  if (e === 'doc') return 'doc'
+  if (['mp4', 'webm', 'ogg', 'mov', 'm4v'].includes(e)) return 'video'
+  if (['mp3', 'wav', 'aac', 'flac', 'm4a', 'oga', 'opus'].includes(e)) return 'audio'
   return 'other'
 })
 
 const title = computed(() => filename.value || '材料文件预览')
+
+const apiBase = computed(() => (import.meta.env.VITE_APP_BASE_API || '/api').replace(/\/$/, ''))
+
+const docPreviewUrl = computed(() => {
+  const url = resolvedUrl.value
+  if (!url) return ''
+  return `${apiBase.value}/battery/sales/material/preview/doc?url=${encodeURIComponent(url)}`
+})
 
 const goBack = () => {
   const from = (rawFrom.value || '').trim()
@@ -121,6 +161,13 @@ const goBack = () => {
     return
   }
   router.push({ path: '/battery/sales/list' })
+}
+
+const clearViewerState = () => {
+  error.value = ''
+  textContent.value = ''
+  markdownHtml.value = ''
+  docxHtml.value = ''
 }
 
 const openInNewTab = () => {
@@ -139,23 +186,94 @@ const downloadFile = () => {
   a.remove()
 }
 
-const loadText = async () => {
-  error.value = ''
-  textContent.value = ''
-  if (!resolvedUrl.value) {
+const loadContent = async () => {
+  clearViewerState()
+  const url = resolvedUrl.value
+  const type = viewerType.value
+  if (!url) {
     error.value = '缺少文件地址参数'
     return
   }
-  if (viewerType.value !== 'text') return
+  if (!['text', 'markdown', 'docx', 'doc'].includes(type)) return
+
+  const fetchUrl = type === 'doc' ? docPreviewUrl.value : url
+  if (type === 'doc' && !fetchUrl) {
+    error.value = '缺少文件地址参数'
+    return
+  }
+
+  const cached = contentCache.get(`${type}:${fetchUrl}`)
+  if (cached) {
+    if (type === 'markdown') {
+      markdownHtml.value = cached
+    } else if (type === 'docx') {
+      docxHtml.value = cached
+    } else {
+      textContent.value = cached
+    }
+    return
+  }
+
+  if (activeController) {
+    activeController.abort()
+  }
+  activeController = new AbortController()
 
   loading.value = true
   try {
-    const res = await fetch(resolvedUrl.value, { credentials: 'include' })
+    const headers = {}
+    if (userStore?.token) {
+      headers.Authorization = 'Bearer ' + userStore.token
+    }
+    const res = await fetch(fetchUrl, {
+      headers,
+      credentials: 'include',
+      cache: 'force-cache',
+      signal: activeController.signal
+    })
     if (!res.ok) {
       throw new Error(`HTTP ${res.status}`)
     }
-    textContent.value = await res.text()
+    if (type === 'markdown') {
+      const body = await res.text()
+      const [{ marked }, domPurifyModule] = await Promise.all([
+        import('marked'),
+        import('dompurify')
+      ])
+      const DOMPurify = domPurifyModule?.default || domPurifyModule
+      const html = marked.parse(body, { gfm: true, breaks: true })
+      const safe = DOMPurify.sanitize(String(html || ''))
+      markdownHtml.value = safe
+      contentCache.set(`${type}:${fetchUrl}`, safe)
+    } else if (type === 'docx') {
+      const buffer = await res.arrayBuffer()
+      const [mammothModule, domPurifyModule] = await Promise.all([
+        import('mammoth'),
+        import('dompurify')
+      ])
+      const mammoth = mammothModule?.default || mammothModule
+      const DOMPurify = domPurifyModule?.default || domPurifyModule
+      const result = await mammoth.convertToHtml({ arrayBuffer: buffer })
+      const safe = DOMPurify.sanitize(String(result?.value || ''))
+      docxHtml.value = safe
+      contentCache.set(`${type}:${fetchUrl}`, safe)
+    } else if (type === 'doc') {
+      const json = await res.json()
+      if (json?.code !== 200) {
+        throw new Error(json?.message || '预览解析失败')
+      }
+      const body = String(json?.data ?? '')
+      textContent.value = body
+      contentCache.set(`${type}:${fetchUrl}`, body)
+    } else {
+      const body = await res.text()
+      textContent.value = body
+      contentCache.set(`${type}:${fetchUrl}`, body)
+    }
   } catch (e) {
+    if (e?.name === 'AbortError') {
+      return
+    }
     error.value = e?.message || '加载失败'
   } finally {
     loading.value = false
@@ -163,6 +281,6 @@ const loadText = async () => {
 }
 
 watch([resolvedUrl, viewerType], () => {
-  loadText()
+  loadContent()
 }, { immediate: true })
 </script>
