@@ -40,9 +40,24 @@ public class AuditMigrationTest {
                 "sales_price DECIMAL(10,2)," +
                 "sales_date DATETIME," +
                 "sales_person VARCHAR(50)," +
-                "status INT DEFAULT 0 COMMENT '状态: 0-待审核, 1-已通过, 2-已驳回'" +
+                "status INT DEFAULT 0 COMMENT '状态: 0-待审核, 1-已通过, 2-已驳回'," +
+                "audit_opinion VARCHAR(500) COMMENT '审核意见'," +
+                "material_desc VARCHAR(500) COMMENT '材料说明'," +
+                "material_url TEXT COMMENT '材料文件URL(可为JSON数组)'" +
                 ")");
         System.out.println("Created sales_record table");
+        try {
+            jdbcTemplate.execute("ALTER TABLE sales_record ADD COLUMN audit_opinion VARCHAR(500) COMMENT '审核意见'");
+        } catch (Exception ignored) {
+        }
+        try {
+            jdbcTemplate.execute("ALTER TABLE sales_record ADD COLUMN material_desc VARCHAR(500) COMMENT '材料说明'");
+        } catch (Exception ignored) {
+        }
+        try {
+            jdbcTemplate.execute("ALTER TABLE sales_record ADD COLUMN material_url TEXT COMMENT '材料文件URL(可为JSON数组)'");
+        } catch (Exception ignored) {
+        }
         salesRecordService.page(new Page<>(1, 10));
         
         // 3. 为 maintenance_record 添加 status 字段

@@ -10,9 +10,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.util.StringUtils;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Objects;
+import java.util.UUID;
 
 /**
  * 电池业务统一控制器
@@ -612,6 +617,12 @@ public class BatteryBusinessController {
         if (price == null || price.compareTo(BigDecimal.ZERO) <= 0) {
             return Result.error(400, "售价必须大于0");
         }
+        if (!StringUtils.hasText(record.getMaterialDesc())) {
+            return Result.error(400, "材料说明不能为空");
+        }
+        if (!StringUtils.hasText(record.getMaterialUrl())) {
+            record.setMaterialUrl("[]");
+        }
         BatteryInfo battery = batteryInfoService.getById(record.getBatteryId());
         if (battery == null) {
             return Result.error(400, "电池不存在");
@@ -684,6 +695,14 @@ public class BatteryBusinessController {
         if (price == null || price.compareTo(BigDecimal.ZERO) <= 0) {
             return Result.error(400, "售价必须大于0");
         }
+        String materialDescToUse = StringUtils.hasText(record.getMaterialDesc()) ? record.getMaterialDesc() : existing.getMaterialDesc();
+        if (!StringUtils.hasText(materialDescToUse)) {
+            return Result.error(400, "材料说明不能为空");
+        }
+        String materialUrlToUse = record.getMaterialUrl() != null ? record.getMaterialUrl() : existing.getMaterialUrl();
+        if (!StringUtils.hasText(materialUrlToUse)) {
+            materialUrlToUse = "[]";
+        }
         String salesPersonToUse = StringUtils.hasText(record.getSalesPerson()) ? record.getSalesPerson() : existing.getSalesPerson();
         if (!StringUtils.hasText(salesPersonToUse)) {
             salesPersonToUse = getCurrentUserDisplayName(request);
@@ -696,16 +715,50 @@ public class BatteryBusinessController {
                 new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<>();
         updateWrapper.eq(SalesRecord::getSalesId, record.getSalesId());
         updateWrapper.set(SalesRecord::getStatus, 0);
+        updateWrapper.set(SalesRecord::getAuditOpinion, null);
         updateWrapper.set(StringUtils.hasText(record.getBatteryId()), SalesRecord::getBatteryId, record.getBatteryId());
         updateWrapper.set(StringUtils.hasText(record.getBuyerName()), SalesRecord::getBuyerName, record.getBuyerName());
         updateWrapper.set(record.getSalesPrice() != null, SalesRecord::getSalesPrice, record.getSalesPrice());
         updateWrapper.set(record.getSalesDate() != null, SalesRecord::getSalesDate, record.getSalesDate());
         updateWrapper.set(StringUtils.hasText(record.getSalesPerson()), SalesRecord::getSalesPerson, record.getSalesPerson());
         updateWrapper.set(!StringUtils.hasText(existing.getSalesPerson()), SalesRecord::getSalesPerson, salesPersonToUse);
+        updateWrapper.set(SalesRecord::getMaterialDesc, materialDescToUse);
+        updateWrapper.set(SalesRecord::getMaterialUrl, materialUrlToUse);
         boolean success = salesRecordService.update(updateWrapper);
         if (success) {
             sysAuditService.submitAudit("SALES", record.getSalesId().toString(), salesPersonToUse);
         }
         return Result.success(success);
+    }
+
+    @PostMapping("/sales/material/upload")
+    public Result<String> uploadSalesMaterial(@RequestParam("file") MultipartFile file, HttpServletRequest request) {
+        Long userId = getCurrentUserId(request);
+        if (!hasAnyRole(userId, "admin", "sales", "dealer")) {
+            return forbidden();
+        }
+        if (file == null || file.isEmpty()) {
+            return Result.error(400, "文件不能为空");
+        }
+        if (file.getSize() > 10L * 1024 * 1024) {
+            return Result.error(400, "文件大小不能超过10MB");
+        }
+        String originalFilename = file.getOriginalFilename();
+        String safeName = (originalFilename == null ? "file" : originalFilename)
+                .replace("\\", "_")
+                .replace("/", "_")
+                .replace("..", "_");
+        String savedName = UUID.randomUUID().toString().replace("-", "") + "_" + safeName;
+        Path targetDir = Paths.get(System.getProperty("user.dir"), "uploads", "sales");
+        try {
+            Files.createDirectories(targetDir);
+            Path targetFile = targetDir.resolve(savedName);
+            file.transferTo(targetFile.toFile());
+            String baseUrl = request.getScheme() + "://" + request.getServerName() + ":" + request.getServerPort();
+            String url = baseUrl + "/files/sales/" + savedName;
+            return Result.success(url);
+        } catch (Exception e) {
+            return Result.error(500, "上传失败");
+        }
     }
 }

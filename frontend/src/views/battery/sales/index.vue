@@ -33,11 +33,25 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" align="center" width="150" class-name="small-padding fixed-width">
+      <el-table-column label="驳回原因" prop="auditOpinion" align="center" />
+      <el-table-column label="材料说明" prop="materialDesc" align="center" />
+      <el-table-column label="材料文件" align="center" width="180">
         <template #default="{ row }">
-          <el-button v-if="row.status === 0" type="primary" size="small" @click="handleAudit(row)">
-            审核
+          <div v-if="parseMaterialUrls(row.materialUrl).length">
+            <el-link v-for="(url, idx) in parseMaterialUrls(row.materialUrl)" :key="url + idx" :href="url"
+              target="_blank" type="primary" :underline="false" style="margin-right: 8px;">
+              文件{{ idx + 1 }}
+            </el-link>
+          </div>
+          <span v-else>-</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="操作" align="center" width="120">
+        <template #default="{ row }">
+          <el-button v-if="row.status === 2" type="primary" size="small" @click="handleResubmit(row)">
+            重新提交
           </el-button>
+          <span v-else>-</span>
         </template>
       </el-table-column>
     </el-table>
@@ -45,7 +59,7 @@
     <pagination v-show="total > 0" :total="total" v-model:page="listQuery.pageNum" v-model:limit="listQuery.pageSize"
       @pagination="getList" />
 
-    <el-dialog title="新增销售记录" v-model="dialogFormVisible">
+    <el-dialog :title="dialogMode === 'create' ? '新增销售记录' : '重新提交销售记录'" v-model="dialogFormVisible">
       <el-form ref="dataForm" :model="temp" :rules="rules" label-width="100px">
         <el-form-item label="电池ID" prop="batteryId">
           <el-select v-model="temp.batteryId" filterable placeholder="请选择电池ID" :loading="batteryLoading" style="width: 100%;">
@@ -61,40 +75,30 @@
         <el-form-item label="销售员">
           <el-input v-model="temp.salesPerson" disabled placeholder="自动使用当前账号" />
         </el-form-item>
+        <el-form-item label="材料说明">
+          <el-input v-model="temp.materialDesc" type="textarea" :rows="3" />
+        </el-form-item>
+        <el-form-item label="材料文件">
+          <el-upload v-model:file-list="materialFileList" :http-request="handleMaterialUpload" :on-remove="handleMaterialRemove"
+            :limit="5">
+            <el-button type="primary">上传文件</el-button>
+          </el-upload>
+        </el-form-item>
       </el-form>
       <template #footer>
         <div class="dialog-footer">
           <el-button @click="dialogFormVisible = false">取消</el-button>
-          <el-button type="primary" @click="createData">确认</el-button>
+          <el-button type="primary" @click="submitData">确认</el-button>
         </div>
       </template>
     </el-dialog>
 
-    <el-dialog title="审核销售记录" v-model="dialogAuditVisible">
-      <el-form :model="auditTemp" label-width="100px">
-        <el-form-item label="审核结果">
-          <el-radio-group v-model="auditTemp.status">
-            <el-radio :label="1">通过</el-radio>
-            <el-radio :label="2">驳回</el-radio>
-          </el-radio-group>
-        </el-form-item>
-        <el-form-item label="审核意见">
-          <el-input v-model="auditTemp.auditOpinion" type="textarea" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <div class="dialog-footer">
-          <el-button @click="dialogAuditVisible = false">取消</el-button>
-          <el-button type="primary" @click="submitAudit">确认</el-button>
-        </div>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { getSalesList, saveSales, auditSales, getBatteryList } from '@/api/battery'
+import { getSalesList, saveSales, updateSales, getBatteryList, uploadSalesMaterial } from '@/api/battery'
 import Pagination from '@/components/Pagination/index.vue'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/store/user'
@@ -118,19 +122,27 @@ const statusMap = {
 }
 
 const dialogFormVisible = ref(false)
+const dialogMode = ref('create')
 const temp = reactive({
+  salesId: undefined,
   batteryId: '',
   buyerName: '',
   salesPrice: '',
-  salesPerson: ''
+  salesPerson: '',
+  materialDesc: '',
+  materialUrl: ''
 })
 
 const batteryOptions = ref([])
 const batteryLoading = ref(false)
 
+const materialFileList = ref([])
+const materialUrls = ref([])
+
 const rules = {
   batteryId: [{ required: true, message: '电池ID必填', trigger: 'change' }],
   buyerName: [{ required: true, message: '买家姓名必填', trigger: 'blur' }],
+  materialDesc: [{ required: true, message: '材料说明必填', trigger: 'blur' }],
   salesPrice: [{
     required: true,
     trigger: 'blur',
@@ -149,13 +161,6 @@ const rules = {
   }]
 }
 
-const dialogAuditVisible = ref(false)
-const auditTemp = reactive({
-  salesId: undefined,
-  status: 1,
-  auditOpinion: ''
-})
-
 const loadSellableBatteries = () => {
   batteryLoading.value = true
   return getBatteryList({
@@ -171,6 +176,48 @@ const loadSellableBatteries = () => {
     batteryOptions.value = []
     batteryLoading.value = false
   })
+}
+
+const parseMaterialUrls = (raw) => {
+  if (!raw) return []
+  if (Array.isArray(raw)) return raw.filter(Boolean)
+  if (typeof raw !== 'string') return []
+  const text = raw.trim()
+  if (!text) return []
+  try {
+    const parsed = JSON.parse(text)
+    if (Array.isArray(parsed)) return parsed.filter(Boolean)
+  } catch (e) {
+  }
+  if (text.includes(',')) {
+    return text.split(',').map(s => s.trim()).filter(Boolean)
+  }
+  return [text]
+}
+
+const syncMaterialFileList = () => {
+  materialFileList.value = materialUrls.value.map((url, idx) => ({
+    name: `文件${idx + 1}`,
+    url,
+    status: 'success'
+  }))
+}
+
+const handleMaterialUpload = (options) => {
+  const formData = new FormData()
+  formData.append('file', options.file)
+  uploadSalesMaterial(formData).then((url) => {
+    materialUrls.value.push(url)
+    syncMaterialFileList()
+    options.onSuccess && options.onSuccess({ url }, options.file)
+  }).catch((err) => {
+    options.onError && options.onError(err)
+  })
+}
+
+const handleMaterialRemove = (uploadFile, uploadFiles) => {
+  materialUrls.value = (uploadFiles || []).map(f => f.url).filter(Boolean)
+  syncMaterialFileList()
 }
 
 const handleFilter = () => {
@@ -195,49 +242,54 @@ const getList = () => {
 }
 
 const handleCreate = async () => {
+  dialogMode.value = 'create'
+  temp.salesId = undefined
   temp.batteryId = ''
   temp.buyerName = ''
   temp.salesPrice = ''
   temp.salesPerson = userStore.name || ''
+  temp.materialDesc = ''
+  temp.materialUrl = ''
+  materialUrls.value = []
+  syncMaterialFileList()
   await loadSellableBatteries()
   dialogFormVisible.value = true
 }
 
-const createData = () => {
+const handleResubmit = async (row) => {
+  dialogMode.value = 'resubmit'
+  temp.salesId = row.salesId
+  temp.batteryId = row.batteryId || ''
+  temp.buyerName = row.buyerName || ''
+  temp.salesPrice = row.salesPrice != null ? String(row.salesPrice) : ''
+  temp.salesPerson = userStore.name || row.salesPerson || ''
+  temp.materialDesc = row.materialDesc || ''
+  materialUrls.value = parseMaterialUrls(row.materialUrl)
+  syncMaterialFileList()
+  await loadSellableBatteries()
+  dialogFormVisible.value = true
+}
+
+const submitData = () => {
   if (!dataForm.value) {
     return
   }
   if (!temp.salesPerson) {
     temp.salesPerson = userStore.name || ''
   }
+  temp.materialUrl = JSON.stringify(materialUrls.value)
   dataForm.value.validate((valid) => {
     if (!valid) {
       return
     }
-    saveSales(temp).then(() => {
+    const req = dialogMode.value === 'create' ? saveSales(temp) : updateSales(temp)
+    req.then(() => {
       dialogFormVisible.value = false
-      ElMessage.success('创建成功，已提交审核')
+      ElMessage.success(dialogMode.value === 'create' ? '创建成功，已提交审核' : '重新提交成功，已提交审核')
       getList()
     }).catch((err) => {
       console.error(err)
     })
-  })
-}
-
-const handleAudit = (row) => {
-  auditTemp.salesId = row.salesId
-  auditTemp.status = 1
-  auditTemp.auditOpinion = ''
-  dialogAuditVisible.value = true
-}
-
-const submitAudit = () => {
-  auditSales(auditTemp).then(() => {
-    dialogAuditVisible.value = false
-    ElMessage.success('审核完成')
-    getList()
-  }).catch((err) => {
-    console.error(err)
   })
 }
 

@@ -149,9 +149,25 @@ export function saveSales(data) {
   })
 }
 
+export function updateSales(data) {
+  return request({
+    url: '/battery/sales',
+    method: 'put',
+    data
+  })
+}
+
 export function auditSales(data) {
   return request({
     url: '/battery/sales/audit',
+    method: 'post',
+    data
+  })
+}
+
+export function uploadSalesMaterial(data) {
+  return request({
+    url: '/battery/sales/material/upload',
     method: 'post',
     data
   })

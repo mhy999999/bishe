@@ -22,6 +22,18 @@ public class BisheApplication {
                 jdbcTemplate.execute("ALTER TABLE sys_user MODIFY COLUMN password VARCHAR(128)");
             } catch (Exception ignored) {
             }
+            try {
+                jdbcTemplate.execute("ALTER TABLE sales_record ADD COLUMN audit_opinion VARCHAR(500) COMMENT '审核意见'");
+            } catch (Exception ignored) {
+            }
+            try {
+                jdbcTemplate.execute("ALTER TABLE sales_record ADD COLUMN material_desc VARCHAR(500) COMMENT '材料说明'");
+            } catch (Exception ignored) {
+            }
+            try {
+                jdbcTemplate.execute("ALTER TABLE sales_record ADD COLUMN material_url TEXT COMMENT '材料文件URL(可为JSON数组)'");
+            } catch (Exception ignored) {
+            }
         };
     }
 }

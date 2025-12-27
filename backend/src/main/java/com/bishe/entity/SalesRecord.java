@@ -21,4 +21,6 @@ public class SalesRecord {
     private String salesPerson;
     private Integer status;
     private String auditOpinion;
+    private String materialDesc;
+    private String materialUrl;
 }
