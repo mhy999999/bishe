@@ -18,11 +18,9 @@ D:\project\bishe\backend\src\main\java\com\bishe\service\impl\SysRoleServiceImpl
 D:\project\bishe\backend\src\main\java\com\bishe\service\impl\VehicleInfoServiceImpl.java
 D:\project\bishe\backend\src\main\java\com\bishe\entity\SalesRecord.java
 D:\project\bishe\backend\src\main\java\com\bishe\service\ISysAuditService.java
-D:\project\bishe\backend\src\main\java\com\bishe\service\ISysDictService.java
 D:\project\bishe\backend\src\main\java\com\bishe\entity\RecyclingAppraisal.java
 D:\project\bishe\backend\src\main\java\com\bishe\mapper\SysAuditMapper.java
 D:\project\bishe\backend\src\main\java\com\bishe\service\ISysRoleService.java
-D:\project\bishe\backend\src\main\java\com\bishe\entity\SysDict.java
 D:\project\bishe\backend\src\main\java\com\bishe\controller\SystemController.java
 D:\project\bishe\backend\src\main\java\com\bishe\entity\MaintenanceRecord.java
 D:\project\bishe\backend\src\main\java\com\bishe\service\ISalesRecordService.java
@@ -51,7 +49,6 @@ D:\project\bishe\backend\src\main\java\com\bishe\service\impl\BatteryInfoService
 D:\project\bishe\backend\src\main\java\com\bishe\mapper\BatteryTransferRecordMapper.java
 D:\project\bishe\backend\src\main\java\com\bishe\service\impl\SysAuditServiceImpl.java
 D:\project\bishe\backend\src\main\java\com\bishe\entity\BatteryInfo.java
-D:\project\bishe\backend\src\main\java\com\bishe\mapper\SysDictMapper.java
 D:\project\bishe\backend\src\main\java\com\bishe\entity\SysMenu.java
 D:\project\bishe\backend\src\main\java\com\bishe\config\MybatisPlusConfig.java
 D:\project\bishe\backend\src\main\java\com\bishe\config\WebConfig.java
@@ -59,7 +56,6 @@ D:\project\bishe\backend\src\main\java\com\bishe\mapper\SysMenuMapper.java
 D:\project\bishe\backend\src\main\java\com\bishe\service\impl\MaintenanceRecordServiceImpl.java
 D:\project\bishe\backend\src\main\java\com\bishe\mapper\QualityInspectionMapper.java
 D:\project\bishe\backend\src\main\java\com\bishe\mapper\VehicleInfoMapper.java
-D:\project\bishe\backend\src\main\java\com\bishe\service\impl\SysDictServiceImpl.java
 D:\project\bishe\backend\src\main\java\com\bishe\entity\VehicleInfo.java
 D:\project\bishe\backend\src\main\java\com\bishe\service\IBatteryTransferRecordService.java
 D:\project\bishe\backend\src\main\java\com\bishe\service\IMaintenanceRecordService.java

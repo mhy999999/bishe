@@ -20,7 +20,7 @@ import java.util.List;
 
 /**
  * 系统管理统一控制器
- * 包含: 用户管理, 角色管理, 部门管理, 菜单管理, 字典管理
+ * 包含: 用户管理, 角色管理, 部门管理, 菜单管理
  */
 @RestController
 @RequestMapping("/system")
@@ -34,8 +34,6 @@ public class SystemController {
     private ISysDeptService sysDeptService;
     @Autowired
     private ISysMenuService sysMenuService;
-    @Autowired
-    private ISysDictService sysDictService;
     @Autowired
     private com.bishe.utils.JwtUtils jwtUtils;
     @Autowired
@@ -610,46 +608,6 @@ public class SystemController {
         }
         sysRoleMapper.deleteRoleMenusByMenuId(id);
         return Result.success(sysMenuService.removeById(id));
-    }
-
-    // ==================== 字典管理 (SysDict) ====================
-
-    @GetMapping("/dict/list")
-    public Result<Page<SysDict>> listDict(@RequestParam(defaultValue = "1") Integer pageNum,
-                                          @RequestParam(defaultValue = "10") Integer pageSize,
-                                          @RequestParam(required = false) String dictType,
-                                          HttpServletRequest request) {
-        if (!isAdmin(getCurrentUserId(request))) {
-            return forbidden();
-        }
-        Page<SysDict> page = new Page<>(pageNum, pageSize);
-        LambdaQueryWrapper<SysDict> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(StringUtils.hasText(dictType), SysDict::getDictType, dictType);
-        return Result.success(sysDictService.page(page, wrapper));
-    }
-
-    @PostMapping("/dict")
-    public Result<Boolean> saveDict(@RequestBody SysDict sysDict, HttpServletRequest request) {
-        if (!isAdmin(getCurrentUserId(request))) {
-            return forbidden();
-        }
-        return Result.success(sysDictService.save(sysDict));
-    }
-
-    @PutMapping("/dict")
-    public Result<Boolean> updateDict(@RequestBody SysDict sysDict, HttpServletRequest request) {
-        if (!isAdmin(getCurrentUserId(request))) {
-            return forbidden();
-        }
-        return Result.success(sysDictService.updateById(sysDict));
-    }
-
-    @DeleteMapping("/dict/{id}")
-    public Result<Boolean> removeDict(@PathVariable Long id, HttpServletRequest request) {
-        if (!isAdmin(getCurrentUserId(request))) {
-            return forbidden();
-        }
-        return Result.success(sysDictService.removeById(id));
     }
 
     @lombok.Data

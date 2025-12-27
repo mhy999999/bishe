@@ -58,12 +58,6 @@ export const asyncRoutes = [
         name: 'Dept',
         component: () => import('@/views/system/dept/index.vue'),
         meta: { title: '部门管理', icon: 'OfficeBuilding', roles: ['admin'] }
-      },
-      {
-        path: 'dict',
-        name: 'Dict',
-        component: () => import('@/views/system/dict/index.vue'),
-        meta: { title: '字典管理', icon: 'Tickets', roles: ['admin'] }
       }
     ]
   },

@@ -7,3 +7,6 @@ import org.apache.ibatis.annotations.Mapper;
 @Mapper
 public interface BatteryAlarmMapper extends BaseMapper<BatteryAlarm> {
 }
+// @Mapper
+// public interface BatteryAlarmMapper extends BaseMapper<BatteryAlarm> {
+// }

@@ -157,34 +157,3 @@ export function deleteDept(id) {
     method: 'delete'
   })
 }
-
-export function getDictList(params) {
-  return request({
-    url: '/system/dict/list',
-    method: 'get',
-    params
-  })
-}
-
-export function createDict(data) {
-  return request({
-    url: '/system/dict',
-    method: 'post',
-    data
-  })
-}
-
-export function updateDict(data) {
-  return request({
-    url: '/system/dict',
-    method: 'put',
-    data
-  })
-}
-
-export function deleteDict(id) {
-  return request({
-    url: '/system/dict/' + id,
-    method: 'delete'
-  })
-}
