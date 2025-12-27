@@ -11,7 +11,7 @@
       <el-table-column label="批次号" prop="batchNo" align="center" />
       <el-table-column label="生产商ID" prop="manufacturerId" align="center" />
       <el-table-column label="生产日期" prop="produceDate" align="center" />
-      <el-table-column label="数量" prop="quantity" align="center" />
+      <el-table-column label="最大生产数量" prop="quantity" align="center" />
       <el-table-column label="操作" align="center" width="200" class-name="small-padding fixed-width">
         <template #default="{ row }">
           <el-button type="primary" size="small" @click="handleViewBatteries(row)">
@@ -57,7 +57,7 @@
         <el-form-item label="生产日期">
           <el-date-picker v-model="temp.produceDate" type="date" placeholder="选择日期" value-format="YYYY-MM-DD" />
         </el-form-item>
-        <el-form-item label="数量">
+        <el-form-item label="最大生产数量">
           <el-input v-model="temp.quantity" type="number" />
         </el-form-item>
       </el-form>

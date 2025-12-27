@@ -11,6 +11,8 @@ import org.springframework.util.StringUtils;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Objects;
+
 /**
  * 电池业务统一控制器
  * 包含: 电池信息, 生产批次, 质检记录, 健康监测, 故障报警, 维修保养, 销售管理
@@ -95,6 +97,12 @@ public class BatteryBusinessController {
         if (batteryInfo.getCreateTime() == null) {
             batteryInfo.setCreateTime(java.time.LocalDateTime.now());
         }
+        if (batteryInfo.getBatchId() != null) {
+            String message = validateBatchCapacity(batteryInfo.getBatchId(), null);
+            if (message != null) {
+                return Result.error(400, message);
+            }
+        }
         // 如果指定了生产批次，状态为"生产中"(0)，否则为"待生产"(6)
         if (batteryInfo.getBatchId() != null) {
             batteryInfo.setStatus(0);
@@ -106,6 +114,18 @@ public class BatteryBusinessController {
 
     @PutMapping("/info")
     public Result<Boolean> updateInfo(@RequestBody BatteryInfo batteryInfo) {
+        if (batteryInfo.getBatchId() != null && StringUtils.hasText(batteryInfo.getBatteryId())) {
+            BatteryInfo existing = batteryInfoService.getById(batteryInfo.getBatteryId());
+            if (existing == null) {
+                return Result.error(400, "电池不存在");
+            }
+            if (!Objects.equals(existing.getBatchId(), batteryInfo.getBatchId())) {
+                String message = validateBatchCapacity(batteryInfo.getBatchId(), existing.getBatteryId());
+                if (message != null) {
+                    return Result.error(400, message);
+                }
+            }
+        }
         // 如果更新时有了批次ID，且之前的状态可能是待生产，则更新为生产中
         // 为了简化逻辑，只要前端传了batchId，且状态是6(待生产)，就改为0
         if (batteryInfo.getBatchId() != null && (batteryInfo.getStatus() == null || batteryInfo.getStatus() == 6)) {
@@ -130,6 +150,9 @@ public class BatteryBusinessController {
 
     @PostMapping("/batch")
     public Result<Boolean> saveBatch(@RequestBody ProductionBatch batch) {
+        if (batch.getQuantity() == null || batch.getQuantity() <= 0) {
+            return Result.error(400, "最大生产数量必须大于0");
+        }
         return Result.success(productionBatchService.save(batch));
     }
 
@@ -155,6 +178,28 @@ public class BatteryBusinessController {
         }
         
         return Result.success(batteryInfoService.updateBatchById(batteries));
+    }
+
+    private String validateBatchCapacity(Long batchId, String excludeBatteryId) {
+        ProductionBatch batch = productionBatchService.getById(batchId);
+        if (batch == null) {
+            return "生产批次不存在";
+        }
+        Integer maxQuantity = batch.getQuantity();
+        if (maxQuantity == null || maxQuantity <= 0) {
+            return "该批次未设置最大生产数量，无法添加电池";
+        }
+        LambdaQueryWrapper<BatteryInfo> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(BatteryInfo::getBatchId, batchId);
+        wrapper.eq(BatteryInfo::getStatus, 0);
+        if (StringUtils.hasText(excludeBatteryId)) {
+            wrapper.ne(BatteryInfo::getBatteryId, excludeBatteryId);
+        }
+        long current = batteryInfoService.count(wrapper);
+        if (current >= maxQuantity) {
+            return "该批次已达到最大生产数量（上限" + maxQuantity + "），当前生产中" + current + "个，无法继续添加";
+        }
+        return null;
     }
 
     // ==================== 质检记录 (QualityInspection) ====================
