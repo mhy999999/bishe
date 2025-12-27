@@ -82,6 +82,8 @@ const submitAudit = () => {
     dialogAuditVisible.value = false
     ElMessage.success('审核完成')
     getList()
+  }).catch((err) => {
+    console.error(err)
   })
 }
 

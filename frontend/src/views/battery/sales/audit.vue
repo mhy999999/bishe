@@ -86,6 +86,8 @@ const submitAudit = () => {
     dialogAuditVisible.value = false
     ElMessage.success('审核完成')
     getList()
+  }).catch((err) => {
+    console.error(err)
   })
 }
 
@@ -102,6 +104,11 @@ const getList = () => {
       list.value = pageData.records
       total.value = pageData.total
     }
+    listLoading.value = false
+  }).catch((err) => {
+    console.error(err)
+    list.value = []
+    total.value = 0
     listLoading.value = false
   })
 }

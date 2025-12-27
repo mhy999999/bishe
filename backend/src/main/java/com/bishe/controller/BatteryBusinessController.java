@@ -11,6 +11,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.util.Objects;
 
 /**
@@ -39,6 +40,57 @@ public class BatteryBusinessController {
     private ISysAuditService sysAuditService;
     @Autowired
     private ISysUserService sysUserService;
+    @Autowired
+    private ISysRoleService sysRoleService;
+
+    private Long getCurrentUserId(HttpServletRequest request) {
+        if (request == null) {
+            return null;
+        }
+        Object userIdObj = request.getAttribute("userId");
+        if (userIdObj instanceof Long userId) {
+            return userId;
+        }
+        if (userIdObj instanceof Number num) {
+            return num.longValue();
+        }
+        return null;
+    }
+
+    private boolean hasAnyRole(Long userId, String... roleKeys) {
+        if (userId == null || roleKeys == null || roleKeys.length == 0) {
+            return false;
+        }
+        java.util.Set<String> roles = sysRoleService.getRoleKeysByUserId(userId);
+        if (roles == null || roles.isEmpty()) {
+            return false;
+        }
+        for (String roleKey : roleKeys) {
+            if (StringUtils.hasText(roleKey) && roles.contains(roleKey)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String getCurrentUserDisplayName(HttpServletRequest request) {
+        Long userId = getCurrentUserId(request);
+        if (userId == null) {
+            return null;
+        }
+        SysUser user = sysUserService.getById(userId);
+        if (user == null) {
+            return null;
+        }
+        if (StringUtils.hasText(user.getNickname())) {
+            return user.getNickname();
+        }
+        return user.getUsername();
+    }
+
+    private <T> Result<T> forbidden() {
+        return Result.error(403, "无权限访问");
+    }
 
     // ==================== 电池信息 (BatteryInfo) ====================
 
@@ -58,7 +110,21 @@ public class BatteryBusinessController {
     }
 
     @PostMapping("/sales/audit")
-    public Result<Boolean> auditSales(@RequestBody SalesRecord auditData) {
+    public Result<Boolean> auditSales(@RequestBody SalesRecord auditData, HttpServletRequest request) {
+        Long userId = getCurrentUserId(request);
+        if (!hasAnyRole(userId, "admin", "sales", "dealer")) {
+            return forbidden();
+        }
+        if (auditData == null || auditData.getSalesId() == null) {
+            return Result.error(400, "销售ID不能为空");
+        }
+        if (auditData.getStatus() == null || (auditData.getStatus() != 1 && auditData.getStatus() != 2)) {
+            return Result.error(400, "审核状态不合法");
+        }
+        String auditor = getCurrentUserDisplayName(request);
+        if (!StringUtils.hasText(auditor)) {
+            auditor = "system";
+        }
         LambdaQueryWrapper<SysAudit> query = new LambdaQueryWrapper<>();
         query.eq(SysAudit::getBusinessType, "SALES");
         query.eq(SysAudit::getBusinessId, auditData.getSalesId().toString());
@@ -68,16 +134,39 @@ public class BatteryBusinessController {
         SysAudit audit = sysAuditService.getOne(query);
 
         if (audit != null) {
-            sysAuditService.doAudit(audit.getAuditId(), auditData.getStatus(), auditData.getAuditOpinion(), "admin");
+            SalesRecord record = salesRecordService.getById(auditData.getSalesId());
+            if (record == null) {
+                return Result.error("记录不存在");
+            }
+            if (!StringUtils.hasText(record.getBatteryId())) {
+                return Result.error(400, "电池ID不能为空");
+            }
+            BatteryInfo battery = batteryInfoService.getById(record.getBatteryId());
+            if (battery == null) {
+                return Result.error(400, "电池不存在");
+            }
+            if (auditData.getStatus() == 1) {
+                if (battery.getStatus() == null || battery.getStatus() != 1) {
+                    return Result.error(400, "仅允许审核通过“已上架”的电池销售");
+                }
+            }
+            sysAuditService.doAudit(audit.getAuditId(), auditData.getStatus(), auditData.getAuditOpinion(), auditor);
         } else {
             SalesRecord record = salesRecordService.getById(auditData.getSalesId());
             if (record == null) return Result.error("记录不存在");
-            
+
             record.setStatus(auditData.getStatus());
             record.setAuditOpinion(auditData.getAuditOpinion());
             salesRecordService.updateById(record);
-            
+
             if (auditData.getStatus() == 1 && record.getBatteryId() != null) {
+                BatteryInfo existingBattery = batteryInfoService.getById(record.getBatteryId());
+                if (existingBattery == null) {
+                    return Result.error(400, "电池不存在");
+                }
+                if (existingBattery.getStatus() != null && existingBattery.getStatus() == 4) {
+                    return Result.error(400, "电池已销售");
+                }
                 BatteryInfo batteryInfo = new BatteryInfo();
                 batteryInfo.setBatteryId(record.getBatteryId());
                 batteryInfo.setStatus(4);
@@ -342,7 +431,12 @@ public class BatteryBusinessController {
     @GetMapping("/maintenance/list")
     public Result<Page<MaintenanceRecord>> listMaintenance(@RequestParam(defaultValue = "1") Integer pageNum,
                                                          @RequestParam(defaultValue = "10") Integer pageSize,
-                                                         @RequestParam(required = false) Integer status) {
+                                                         @RequestParam(required = false) Integer status,
+                                                         HttpServletRequest request) {
+        Long userId = getCurrentUserId(request);
+        if (!hasAnyRole(userId, "admin", "maintainer", "maintenance")) {
+            return forbidden();
+        }
         Page<MaintenanceRecord> page = new Page<>(pageNum, pageSize);
         LambdaQueryWrapper<MaintenanceRecord> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(status != null, MaintenanceRecord::getStatus, status);
@@ -351,7 +445,21 @@ public class BatteryBusinessController {
     }
 
     @PostMapping("/maintenance/audit")
-    public Result<Boolean> auditMaintenance(@RequestBody MaintenanceRecord auditData) {
+    public Result<Boolean> auditMaintenance(@RequestBody MaintenanceRecord auditData, HttpServletRequest request) {
+        Long userId = getCurrentUserId(request);
+        if (!hasAnyRole(userId, "admin", "maintainer", "maintenance")) {
+            return forbidden();
+        }
+        if (auditData == null || auditData.getRecordId() == null) {
+            return Result.error(400, "记录ID不能为空");
+        }
+        if (auditData.getStatus() == null || (auditData.getStatus() != 1 && auditData.getStatus() != 2)) {
+            return Result.error(400, "审核状态不合法");
+        }
+        String auditor = getCurrentUserDisplayName(request);
+        if (!StringUtils.hasText(auditor)) {
+            auditor = "system";
+        }
         // 查找关联的待审核任务
         LambdaQueryWrapper<SysAudit> query = new LambdaQueryWrapper<>();
         query.eq(SysAudit::getBusinessType, "MAINTENANCE");
@@ -362,7 +470,7 @@ public class BatteryBusinessController {
         SysAudit audit = sysAuditService.getOne(query);
 
         if (audit != null) {
-            sysAuditService.doAudit(audit.getAuditId(), auditData.getStatus(), auditData.getAuditOpinion(), "admin");
+            sysAuditService.doAudit(audit.getAuditId(), auditData.getStatus(), auditData.getAuditOpinion(), auditor);
         } else {
             MaintenanceRecord record = maintenanceRecordService.getById(auditData.getRecordId());
             if (record == null) return Result.error("记录不存在");
@@ -374,7 +482,36 @@ public class BatteryBusinessController {
     }
 
     @PostMapping("/maintenance")
-    public Result<Boolean> saveMaintenance(@RequestBody MaintenanceRecord record) {
+    public Result<Boolean> saveMaintenance(@RequestBody MaintenanceRecord record, HttpServletRequest request) {
+        Long userId = getCurrentUserId(request);
+        if (!hasAnyRole(userId, "admin", "maintainer", "maintenance")) {
+            return forbidden();
+        }
+        if (record == null) {
+            return Result.error(400, "参数不能为空");
+        }
+        if (!StringUtils.hasText(record.getBatteryId())) {
+            return Result.error(400, "电池ID不能为空");
+        }
+        if (!StringUtils.hasText(record.getFaultType())) {
+            return Result.error(400, "故障类型不能为空");
+        }
+        if (!StringUtils.hasText(record.getDescription())) {
+            return Result.error(400, "维修内容不能为空");
+        }
+        BatteryInfo battery = batteryInfoService.getById(record.getBatteryId());
+        if (battery == null) {
+            return Result.error(400, "电池不存在");
+        }
+        if (battery.getStatus() != null && (battery.getStatus() == 2 || battery.getStatus() == 6)) {
+            return Result.error(400, "当前电池状态不允许提交维修");
+        }
+        if (!StringUtils.hasText(record.getMaintainer())) {
+            record.setMaintainer(getCurrentUserDisplayName(request));
+        }
+        if (!StringUtils.hasText(record.getMaintainer())) {
+            return Result.error(400, "维修人不能为空");
+        }
         record.setStatus(0);
         if (record.getCreateTime() == null) record.setCreateTime(java.time.LocalDateTime.now());
         boolean success = maintenanceRecordService.save(record);
@@ -385,11 +522,55 @@ public class BatteryBusinessController {
     }
 
     @PutMapping("/maintenance")
-    public Result<Boolean> updateMaintenance(@RequestBody MaintenanceRecord record) {
-        record.setStatus(0);
-        boolean success = maintenanceRecordService.updateById(record);
+    public Result<Boolean> updateMaintenance(@RequestBody MaintenanceRecord record, HttpServletRequest request) {
+        Long userId = getCurrentUserId(request);
+        if (!hasAnyRole(userId, "admin", "maintainer", "maintenance")) {
+            return forbidden();
+        }
+        if (record == null || record.getRecordId() == null) {
+            return Result.error(400, "记录ID不能为空");
+        }
+        MaintenanceRecord existing = maintenanceRecordService.getById(record.getRecordId());
+        if (existing == null) {
+            return Result.error("记录不存在");
+        }
+        if (existing.getStatus() != null && existing.getStatus() == 1 && !hasAnyRole(userId, "admin")) {
+            return Result.error(403, "已通过记录不允许修改");
+        }
+        String batteryIdToUse = StringUtils.hasText(record.getBatteryId()) ? record.getBatteryId() : existing.getBatteryId();
+        if (!StringUtils.hasText(batteryIdToUse)) {
+            return Result.error(400, "电池ID不能为空");
+        }
+        BatteryInfo battery = batteryInfoService.getById(batteryIdToUse);
+        if (battery == null) {
+            return Result.error(400, "电池不存在");
+        }
+        if (battery.getStatus() != null && (battery.getStatus() == 2 || battery.getStatus() == 6)) {
+            return Result.error(400, "当前电池状态不允许提交维修");
+        }
+        String maintainerToUse = StringUtils.hasText(record.getMaintainer()) ? record.getMaintainer() : existing.getMaintainer();
+        if (!StringUtils.hasText(maintainerToUse)) {
+            maintainerToUse = getCurrentUserDisplayName(request);
+        }
+        if (!StringUtils.hasText(maintainerToUse)) {
+            return Result.error(400, "维修人不能为空");
+        }
+
+        com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<MaintenanceRecord> updateWrapper =
+                new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<>();
+        updateWrapper.eq(MaintenanceRecord::getRecordId, record.getRecordId());
+        updateWrapper.set(MaintenanceRecord::getStatus, 0);
+        updateWrapper.set(StringUtils.hasText(record.getBatteryId()), MaintenanceRecord::getBatteryId, record.getBatteryId());
+        updateWrapper.set(record.getStationId() != null, MaintenanceRecord::getStationId, record.getStationId());
+        updateWrapper.set(StringUtils.hasText(record.getFaultType()), MaintenanceRecord::getFaultType, record.getFaultType());
+        updateWrapper.set(record.getDescription() != null, MaintenanceRecord::getDescription, record.getDescription());
+        updateWrapper.set(record.getSolution() != null, MaintenanceRecord::getSolution, record.getSolution());
+        updateWrapper.set(record.getReplaceParts() != null, MaintenanceRecord::getReplaceParts, record.getReplaceParts());
+        updateWrapper.set(StringUtils.hasText(record.getMaintainer()), MaintenanceRecord::getMaintainer, record.getMaintainer());
+        updateWrapper.set(!StringUtils.hasText(existing.getMaintainer()), MaintenanceRecord::getMaintainer, maintainerToUse);
+        boolean success = maintenanceRecordService.update(updateWrapper);
         if (success) {
-            sysAuditService.submitAudit("MAINTENANCE", record.getRecordId().toString(), record.getMaintainer());
+            sysAuditService.submitAudit("MAINTENANCE", record.getRecordId().toString(), maintainerToUse);
         }
         return Result.success(success);
     }
@@ -399,7 +580,12 @@ public class BatteryBusinessController {
     @GetMapping("/sales/list")
     public Result<Page<SalesRecord>> listSales(@RequestParam(defaultValue = "1") Integer pageNum,
                                                @RequestParam(defaultValue = "10") Integer pageSize,
-                                               @RequestParam(required = false) Integer status) {
+                                               @RequestParam(required = false) Integer status,
+                                               HttpServletRequest request) {
+        Long userId = getCurrentUserId(request);
+        if (!hasAnyRole(userId, "admin", "sales", "dealer")) {
+            return forbidden();
+        }
         Page<SalesRecord> page = new Page<>(pageNum, pageSize);
         LambdaQueryWrapper<SalesRecord> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(status != null, SalesRecord::getStatus, status);
@@ -408,7 +594,43 @@ public class BatteryBusinessController {
     }
 
     @PostMapping("/sales")
-    public Result<Boolean> saveSales(@RequestBody SalesRecord record) {
+    public Result<Boolean> saveSales(@RequestBody SalesRecord record, HttpServletRequest request) {
+        Long userId = getCurrentUserId(request);
+        if (!hasAnyRole(userId, "admin", "sales", "dealer")) {
+            return forbidden();
+        }
+        if (record == null) {
+            return Result.error(400, "参数不能为空");
+        }
+        if (!StringUtils.hasText(record.getBatteryId())) {
+            return Result.error(400, "电池ID不能为空");
+        }
+        if (!StringUtils.hasText(record.getBuyerName())) {
+            return Result.error(400, "买家姓名不能为空");
+        }
+        BigDecimal price = record.getSalesPrice();
+        if (price == null || price.compareTo(BigDecimal.ZERO) <= 0) {
+            return Result.error(400, "售价必须大于0");
+        }
+        BatteryInfo battery = batteryInfoService.getById(record.getBatteryId());
+        if (battery == null) {
+            return Result.error(400, "电池不存在");
+        }
+        if (battery.getStatus() == null || battery.getStatus() != 1) {
+            return Result.error(400, "仅允许销售状态为“已上架”的电池");
+        }
+        LambdaQueryWrapper<SalesRecord> pendingWrapper = new LambdaQueryWrapper<>();
+        pendingWrapper.eq(SalesRecord::getBatteryId, record.getBatteryId());
+        pendingWrapper.eq(SalesRecord::getStatus, 0);
+        if (salesRecordService.count(pendingWrapper) > 0) {
+            return Result.error(400, "该电池已有待审核销售记录");
+        }
+        if (!StringUtils.hasText(record.getSalesPerson())) {
+            record.setSalesPerson(getCurrentUserDisplayName(request));
+        }
+        if (!StringUtils.hasText(record.getSalesPerson())) {
+            return Result.error(400, "销售员不能为空");
+        }
         record.setStatus(0);
         if (record.getSalesDate() == null) record.setSalesDate(java.time.LocalDateTime.now());
         boolean success = salesRecordService.save(record);
@@ -419,11 +641,70 @@ public class BatteryBusinessController {
     }
 
     @PutMapping("/sales")
-    public Result<Boolean> updateSales(@RequestBody SalesRecord record) {
-        record.setStatus(0);
-        boolean success = salesRecordService.updateById(record);
+    public Result<Boolean> updateSales(@RequestBody SalesRecord record, HttpServletRequest request) {
+        Long userId = getCurrentUserId(request);
+        if (!hasAnyRole(userId, "admin", "sales", "dealer")) {
+            return forbidden();
+        }
+        if (record == null || record.getSalesId() == null) {
+            return Result.error(400, "销售ID不能为空");
+        }
+        SalesRecord existing = salesRecordService.getById(record.getSalesId());
+        if (existing == null) {
+            return Result.error("记录不存在");
+        }
+        if (existing.getStatus() != null && existing.getStatus() == 1 && !hasAnyRole(userId, "admin")) {
+            return Result.error(403, "已通过记录不允许修改");
+        }
+        String batteryIdToUse = StringUtils.hasText(record.getBatteryId()) ? record.getBatteryId() : existing.getBatteryId();
+        if (!StringUtils.hasText(batteryIdToUse)) {
+            return Result.error(400, "电池ID不能为空");
+        }
+        BatteryInfo battery = batteryInfoService.getById(batteryIdToUse);
+        if (battery == null) {
+            return Result.error(400, "电池不存在");
+        }
+        if (battery.getStatus() == null || battery.getStatus() != 1) {
+            return Result.error(400, "仅允许销售状态为“已上架”的电池");
+        }
+        if (StringUtils.hasText(record.getBatteryId()) && !Objects.equals(existing.getBatteryId(), record.getBatteryId())) {
+            LambdaQueryWrapper<SalesRecord> pendingWrapper = new LambdaQueryWrapper<>();
+            pendingWrapper.eq(SalesRecord::getBatteryId, record.getBatteryId());
+            pendingWrapper.eq(SalesRecord::getStatus, 0);
+            pendingWrapper.ne(SalesRecord::getSalesId, record.getSalesId());
+            if (salesRecordService.count(pendingWrapper) > 0) {
+                return Result.error(400, "该电池已有待审核销售记录");
+            }
+        }
+        String buyerNameToUse = StringUtils.hasText(record.getBuyerName()) ? record.getBuyerName() : existing.getBuyerName();
+        if (!StringUtils.hasText(buyerNameToUse)) {
+            return Result.error(400, "买家姓名不能为空");
+        }
+        BigDecimal price = record.getSalesPrice() != null ? record.getSalesPrice() : existing.getSalesPrice();
+        if (price == null || price.compareTo(BigDecimal.ZERO) <= 0) {
+            return Result.error(400, "售价必须大于0");
+        }
+        String salesPersonToUse = StringUtils.hasText(record.getSalesPerson()) ? record.getSalesPerson() : existing.getSalesPerson();
+        if (!StringUtils.hasText(salesPersonToUse)) {
+            salesPersonToUse = getCurrentUserDisplayName(request);
+        }
+        if (!StringUtils.hasText(salesPersonToUse)) {
+            return Result.error(400, "销售员不能为空");
+        }
+
+        com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<SalesRecord> updateWrapper =
+                new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<>();
+        updateWrapper.eq(SalesRecord::getSalesId, record.getSalesId());
+        updateWrapper.set(SalesRecord::getStatus, 0);
+        updateWrapper.set(StringUtils.hasText(record.getBatteryId()), SalesRecord::getBatteryId, record.getBatteryId());
+        updateWrapper.set(StringUtils.hasText(record.getBuyerName()), SalesRecord::getBuyerName, record.getBuyerName());
+        updateWrapper.set(record.getSalesPrice() != null, SalesRecord::getSalesPrice, record.getSalesPrice());
+        updateWrapper.set(record.getSalesDate() != null, SalesRecord::getSalesDate, record.getSalesDate());
+        updateWrapper.set(StringUtils.hasText(record.getSalesPerson()), SalesRecord::getSalesPerson, record.getSalesPerson());
+        updateWrapper.set(!StringUtils.hasText(existing.getSalesPerson()), SalesRecord::getSalesPerson, salesPersonToUse);
+        boolean success = salesRecordService.update(updateWrapper);
         if (success) {
-            sysAuditService.submitAudit("SALES", record.getSalesId().toString(), record.getSalesPerson());
+            sysAuditService.submitAudit("SALES", record.getSalesId().toString(), salesPersonToUse);
         }
         return Result.success(success);
     }

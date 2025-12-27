@@ -46,18 +46,20 @@
       @pagination="getList" />
 
     <el-dialog title="新增销售记录" v-model="dialogFormVisible">
-      <el-form ref="dataForm" :model="temp" label-width="100px">
-        <el-form-item label="电池ID">
-          <el-input v-model="temp.batteryId" />
+      <el-form ref="dataForm" :model="temp" :rules="rules" label-width="100px">
+        <el-form-item label="电池ID" prop="batteryId">
+          <el-select v-model="temp.batteryId" filterable placeholder="请选择电池ID" :loading="batteryLoading" style="width: 100%;">
+            <el-option v-for="item in batteryOptions" :key="item.batteryId" :label="item.batteryId" :value="item.batteryId" />
+          </el-select>
         </el-form-item>
-        <el-form-item label="买家姓名">
+        <el-form-item label="买家姓名" prop="buyerName">
           <el-input v-model="temp.buyerName" />
         </el-form-item>
-        <el-form-item label="售价">
+        <el-form-item label="售价" prop="salesPrice">
           <el-input v-model="temp.salesPrice" type="number" />
         </el-form-item>
         <el-form-item label="销售员">
-          <el-input v-model="temp.salesPerson" />
+          <el-input v-model="temp.salesPerson" disabled placeholder="自动使用当前账号" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -92,16 +94,21 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { getSalesList, saveSales, auditSales } from '@/api/battery'
+import { getSalesList, saveSales, auditSales, getBatteryList } from '@/api/battery'
 import Pagination from '@/components/Pagination/index.vue'
 import { ElMessage } from 'element-plus'
+import { useUserStore } from '@/store/user'
+
+const dataForm = ref()
+const userStore = useUserStore()
 
 const list = ref([])
 const total = ref(0)
 const listLoading = ref(true)
 const listQuery = reactive({
   pageNum: 1,
-  pageSize: 10
+  pageSize: 10,
+  status: undefined
 })
 
 const statusMap = {
@@ -118,12 +125,53 @@ const temp = reactive({
   salesPerson: ''
 })
 
+const batteryOptions = ref([])
+const batteryLoading = ref(false)
+
+const rules = {
+  batteryId: [{ required: true, message: '电池ID必填', trigger: 'change' }],
+  buyerName: [{ required: true, message: '买家姓名必填', trigger: 'blur' }],
+  salesPrice: [{
+    required: true,
+    trigger: 'blur',
+    validator: (rule, value, callback) => {
+      const num = Number(value)
+      if (!value && value !== 0) {
+        callback(new Error('售价必填'))
+        return
+      }
+      if (Number.isNaN(num) || num <= 0) {
+        callback(new Error('售价必须大于0'))
+        return
+      }
+      callback()
+    }
+  }]
+}
+
 const dialogAuditVisible = ref(false)
 const auditTemp = reactive({
   salesId: undefined,
   status: 1,
   auditOpinion: ''
 })
+
+const loadSellableBatteries = () => {
+  batteryLoading.value = true
+  return getBatteryList({
+    pageNum: 1,
+    pageSize: 1000,
+    status: 1
+  }).then(response => {
+    const pageData = response?.data || response
+    batteryOptions.value = pageData?.records || []
+    batteryLoading.value = false
+  }).catch((err) => {
+    console.error(err)
+    batteryOptions.value = []
+    batteryLoading.value = false
+  })
+}
 
 const handleFilter = () => {
   listQuery.pageNum = 1
@@ -146,19 +194,33 @@ const getList = () => {
   })
 }
 
-const handleCreate = () => {
+const handleCreate = async () => {
   temp.batteryId = ''
   temp.buyerName = ''
   temp.salesPrice = ''
-  temp.salesPerson = ''
+  temp.salesPerson = userStore.name || ''
+  await loadSellableBatteries()
   dialogFormVisible.value = true
 }
 
 const createData = () => {
-  saveSales(temp).then(() => {
-    dialogFormVisible.value = false
-    ElMessage.success('创建成功，已提交审核')
-    getList()
+  if (!dataForm.value) {
+    return
+  }
+  if (!temp.salesPerson) {
+    temp.salesPerson = userStore.name || ''
+  }
+  dataForm.value.validate((valid) => {
+    if (!valid) {
+      return
+    }
+    saveSales(temp).then(() => {
+      dialogFormVisible.value = false
+      ElMessage.success('创建成功，已提交审核')
+      getList()
+    }).catch((err) => {
+      console.error(err)
+    })
   })
 }
 
@@ -174,6 +236,8 @@ const submitAudit = () => {
     dialogAuditVisible.value = false
     ElMessage.success('审核完成')
     getList()
+  }).catch((err) => {
+    console.error(err)
   })
 }
 

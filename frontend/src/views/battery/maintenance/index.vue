@@ -42,14 +42,14 @@
       @pagination="getList" />
 
     <el-dialog title="新增维修记录" v-model="dialogFormVisible">
-      <el-form ref="dataForm" :model="temp" label-width="100px">
-        <el-form-item label="电池ID">
+      <el-form ref="dataForm" :model="temp" :rules="rules" label-width="100px">
+        <el-form-item label="电池ID" prop="batteryId">
           <el-input v-model="temp.batteryId" />
         </el-form-item>
-        <el-form-item label="故障类型">
+        <el-form-item label="故障类型" prop="faultType">
           <el-input v-model="temp.faultType" />
         </el-form-item>
-        <el-form-item label="维修内容">
+        <el-form-item label="维修内容" prop="description">
           <el-input v-model="temp.description" type="textarea" />
         </el-form-item>
         <el-form-item label="解决方案">
@@ -95,6 +95,8 @@ import { getMaintenanceList, saveMaintenance, auditMaintenance } from '@/api/bat
 import Pagination from '@/components/Pagination/index.vue'
 import { ElMessage } from 'element-plus'
 
+const dataForm = ref()
+
 const list = ref([])
 const total = ref(0)
 const listLoading = ref(true)
@@ -118,6 +120,12 @@ const temp = reactive({
   solution: '',
   maintainer: ''
 })
+
+const rules = {
+  batteryId: [{ required: true, message: '电池ID必填', trigger: 'blur' }],
+  faultType: [{ required: true, message: '故障类型必填', trigger: 'blur' }],
+  description: [{ required: true, message: '维修内容必填', trigger: 'blur' }]
+}
 
 const dialogAuditVisible = ref(false)
 const auditTemp = reactive({
@@ -160,10 +168,20 @@ const handleCreate = () => {
 }
 
 const createData = () => {
-  saveMaintenance(temp).then(() => {
-    dialogFormVisible.value = false
-    ElMessage.success('创建成功，已提交审核')
-    getList()
+  if (!dataForm.value) {
+    return
+  }
+  dataForm.value.validate((valid) => {
+    if (!valid) {
+      return
+    }
+    saveMaintenance(temp).then(() => {
+      dialogFormVisible.value = false
+      ElMessage.success('创建成功，已提交审核')
+      getList()
+    }).catch((err) => {
+      console.error(err)
+    })
   })
 }
 
@@ -179,6 +197,8 @@ const submitAudit = () => {
     dialogAuditVisible.value = false
     ElMessage.success('审核完成')
     getList()
+  }).catch((err) => {
+    console.error(err)
   })
 }
 
