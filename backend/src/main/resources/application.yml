@@ -18,7 +18,7 @@ spring:
     url: rm-bp1bvg3o0jrb012ep5o.mysql.rds.aliyuncs.com
     username: root
     # TODO: 请修改为您的数据库密码
-    password: @117921633Yy
+    password: '@117921633Yy'
     hikari:
       minimum-idle: 5
       maximum-pool-size: 20
