@@ -43,6 +43,26 @@ public class BisheApplication {
                 jdbcTemplate.execute("ALTER TABLE sales_record ADD COLUMN material_url TEXT COMMENT '材料文件URL(可为JSON数组)'");
             } catch (Exception ignored) {
             }
+            try {
+                jdbcTemplate.execute("ALTER TABLE chain_transaction ADD COLUMN chain_id BIGINT COMMENT '链ID'");
+            } catch (Exception ignored) {
+            }
+            try {
+                jdbcTemplate.execute("ALTER TABLE chain_transaction ADD COLUMN from_address VARCHAR(42) COMMENT '发起地址'");
+            } catch (Exception ignored) {
+            }
+            try {
+                jdbcTemplate.execute("ALTER TABLE chain_transaction ADD COLUMN error_message TEXT COMMENT '错误信息'");
+            } catch (Exception ignored) {
+            }
+            try {
+                jdbcTemplate.execute("ALTER TABLE chain_transaction MODIFY block_height BIGINT NULL");
+            } catch (Exception ignored) {
+            }
+            try {
+                jdbcTemplate.execute("ALTER TABLE chain_transaction MODIFY contract_addr VARCHAR(42) NULL");
+            } catch (Exception ignored) {
+            }
         };
     }
 

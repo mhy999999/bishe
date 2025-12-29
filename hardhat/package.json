@@ -1,0 +1,15 @@
+{
+  "name": "bishe-hardhat",
+  "private": true,
+  "version": "0.0.1",
+  "devDependencies": {
+    "hardhat": "^2.22.2",
+    "@nomicfoundation/hardhat-ethers": "^3.0.5",
+    "ethers": "^6.10.0",
+    "solc": "0.8.20"
+  },
+  "scripts": {
+    "node": "hardhat node --hostname 127.0.0.1 --port 8545",
+    "deploy:localhost": "node scripts/deploy.js"
+  }
+}

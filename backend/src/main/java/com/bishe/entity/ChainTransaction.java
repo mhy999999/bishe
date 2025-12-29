@@ -11,9 +11,12 @@ public class ChainTransaction {
     @TableId
     private String txHash;
     private Long blockHeight;
+    private Long chainId;
+    private String fromAddress;
     private String contractAddr;
     private String methodName;
     private String params;
     private Integer status;
+    private String errorMessage;
     private LocalDateTime createTime;
 }
