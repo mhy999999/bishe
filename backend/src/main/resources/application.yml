@@ -15,10 +15,10 @@ spring:
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     # 数据库连接地址
-    url: rm-bp1bvg3o0jrb012ep5o.mysql.rds.aliyuncs.com
+    url: jdbc:mysql://127.0.0.1:3306/bishe?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
     username: root
     # TODO: 请修改为您的数据库密码
-    password: '@117921633Yy'
+    password: 'MA151214'
     hikari:
       minimum-idle: 5
       maximum-pool-size: 20
