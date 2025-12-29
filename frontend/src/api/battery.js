@@ -124,6 +124,14 @@ export function saveMaintenance(data) {
   })
 }
 
+export function updateMaintenance(data) {
+  return request({
+    url: '/battery/maintenance',
+    method: 'put',
+    data
+  })
+}
+
 export function auditMaintenance(data) {
   return request({
     url: '/battery/maintenance/audit',
@@ -153,6 +161,23 @@ export function updateSales(data) {
   return request({
     url: '/battery/sales',
     method: 'put',
+    data
+  })
+}
+
+export function completeMaintenance(data) {
+  return request({
+    url: '/battery/maintenance/complete',
+    method: 'post',
+    data
+  })
+}
+
+export function uploadMaintenanceMaterial(kind, data) {
+  return request({
+    url: '/battery/maintenance/material/upload',
+    method: 'post',
+    params: { kind },
     data
   })
 }

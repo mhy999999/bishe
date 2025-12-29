@@ -112,7 +112,7 @@ export const asyncRoutes = [
         name: 'BatteryMaintenance',
         component: ParentView,
         redirect: '/battery/maintenance/list',
-        meta: { title: '电池维修', icon: 'Tools', roles: ['admin', 'maintainer', 'maintenance'] },
+        meta: { title: '电池维修', icon: 'Tools', roles: ['admin', 'maintainer'] },
         children: [
           {
             path: 'list',
@@ -211,13 +211,13 @@ export const asyncRoutes = [
     component: Layout,
     redirect: '/recycling/appraisal',
     name: 'Recycling',
-    meta: { title: '回收利用', icon: 'Refresh', roles: ['admin', 'recycler'] },
+    meta: { title: '回收利用', icon: 'Refresh', roles: ['admin', 'recycler', 'maintainer', 'maintenance'] },
     children: [
       {
         path: 'appraisal',
         name: 'RecyclingAppraisal',
         component: () => import('@/views/recycling/appraisal/index.vue'),
-        meta: { title: '回收评估', icon: 'Edit', roles: ['admin', 'recycler'] }
+        meta: { title: '回收流程', icon: 'Edit', roles: ['admin', 'recycler', 'maintainer', 'maintenance'] }
       }
     ]
   },
@@ -229,7 +229,7 @@ export const asyncRoutes = [
         path: 'index',
         name: 'Trace',
         component: () => import('@/views/trace/index.vue'),
-        meta: { title: '溯源查询', icon: 'Search', roles: ['admin', 'manufacturer', 'dealer', 'owner', 'maintenance', 'recycler'] }
+        meta: { title: '溯源查询', icon: 'Search', roles: ['admin', 'manufacturer', 'dealer', 'owner', 'maintainer', 'maintenance', 'recycler'] }
       }
     ]
   },

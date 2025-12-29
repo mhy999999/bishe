@@ -81,7 +81,7 @@
           <template #default="{ row }">
             <el-tooltip :content="row.dataHash" placement="top" effect="light">
               <el-link type="primary" :underline="false">{{ row.dataHash ? row.dataHash.substring(0, 10) + '...' : '未上链'
-              }}</el-link>
+                }}</el-link>
             </el-tooltip>
           </template>
         </el-table-column>

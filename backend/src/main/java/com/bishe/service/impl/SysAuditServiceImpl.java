@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.bishe.entity.BatteryInfo;
 import com.bishe.entity.MaintenanceRecord;
 import com.bishe.entity.QualityInspection;
+import com.bishe.entity.RecyclingAppraisal;
 import com.bishe.entity.SalesRecord;
 import com.bishe.entity.SysAudit;
 import com.bishe.mapper.SysAuditMapper;
@@ -13,6 +14,7 @@ import com.bishe.service.IBatteryInfoService;
 import com.bishe.service.IChainTransactionService;
 import com.bishe.service.IMaintenanceRecordService;
 import com.bishe.service.IQualityInspectionService;
+import com.bishe.service.IRecyclingAppraisalService;
 import com.bishe.service.ISalesRecordService;
 import com.bishe.service.ISysAuditService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,6 +36,8 @@ public class SysAuditServiceImpl extends ServiceImpl<SysAuditMapper, SysAudit> i
     private IBatteryInfoService batteryInfoService;
     @Autowired
     private IChainTransactionService chainService;
+    @Autowired
+    private IRecyclingAppraisalService recyclingAppraisalService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -132,6 +136,63 @@ public class SysAuditServiceImpl extends ServiceImpl<SysAuditMapper, SysAudit> i
                 batteryInfo.setStatus(4); // 4: 已销售
                 batteryInfoService.updateById(batteryInfo);
             }
+        } else if ("RECYCLING".equals(businessType)) {
+            RecyclingAppraisal appraisal = recyclingAppraisalService.getById(Long.parseLong(businessId));
+            if (appraisal == null) {
+                return;
+            }
+
+            RecyclingAppraisal update = new RecyclingAppraisal();
+            update.setAppraisalId(appraisal.getAppraisalId());
+            update.setStatus(status);
+            update.setUpdateTime(LocalDateTime.now());
+
+            if (status != null && status == 1) {
+                String recycleNo = appraisal.getRecycleNo();
+                if (recycleNo == null || recycleNo.trim().isEmpty()) {
+                    recycleNo = generateRecycleNo();
+                }
+                update.setRecycleNo(recycleNo);
+
+                if (appraisal.getBatteryId() != null) {
+                    BatteryInfo batteryInfo = new BatteryInfo();
+                    batteryInfo.setBatteryId(appraisal.getBatteryId());
+                    batteryInfo.setStatus(5);
+                    batteryInfoService.updateById(batteryInfo);
+                }
+
+                chainService.submitTransaction(
+                        "auditRecyclingApply",
+                        JSONUtil.toJsonStr(java.util.Map.of(
+                                "appraisalId", appraisal.getAppraisalId(),
+                                "batteryId", appraisal.getBatteryId(),
+                                "status", status,
+                                "auditOpinion", auditOpinion,
+                                "auditor", auditor,
+                                "auditTime", audit.getAuditTime(),
+                                "recycleNo", recycleNo
+                        ))
+                );
+            } else if (status != null && status == 2) {
+                chainService.submitTransaction(
+                        "auditRecyclingApply",
+                        JSONUtil.toJsonStr(java.util.Map.of(
+                                "appraisalId", appraisal.getAppraisalId(),
+                                "batteryId", appraisal.getBatteryId(),
+                                "status", status,
+                                "auditOpinion", auditOpinion,
+                                "auditor", auditor,
+                                "auditTime", audit.getAuditTime()
+                        ))
+                );
+            }
+            recyclingAppraisalService.updateById(update);
         }
+    }
+
+    private String generateRecycleNo() {
+        String time = java.time.format.DateTimeFormatter.ofPattern("yyyyMMddHHmmss").format(LocalDateTime.now());
+        int rand = java.util.concurrent.ThreadLocalRandom.current().nextInt(1000, 10000);
+        return "RCY" + time + rand;
     }
 }

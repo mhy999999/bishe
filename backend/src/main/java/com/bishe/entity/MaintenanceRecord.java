@@ -22,4 +22,9 @@ public class MaintenanceRecord {
     private String txHash;
     private Integer status;
     private String auditOpinion;
+    private String issueMaterialDesc;
+    private String issueMaterialUrl;
+    private String completionMaterialDesc;
+    private String completionMaterialUrl;
+    private LocalDateTime completeTime;
 }

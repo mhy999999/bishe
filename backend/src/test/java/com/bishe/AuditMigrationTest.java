@@ -60,12 +60,53 @@ public class AuditMigrationTest {
         }
         salesRecordService.page(new Page<>(1, 10));
         
-        // 3. 为 maintenance_record 添加 status 字段
+        // 3. 确保 maintenance_record 表存在并补齐字段
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS maintenance_record (" +
+                "record_id BIGINT AUTO_INCREMENT PRIMARY KEY," +
+                "battery_id VARCHAR(100) NOT NULL," +
+                "station_id BIGINT," +
+                "fault_type VARCHAR(50) NOT NULL," +
+                "description VARCHAR(500)," +
+                "solution VARCHAR(500)," +
+                "replace_parts VARCHAR(200)," +
+                "maintainer VARCHAR(50) NOT NULL," +
+                "create_time DATETIME," +
+                "tx_hash VARCHAR(66)," +
+                "status INT DEFAULT 0 COMMENT '状态: 0-待审核, 1-已通过, 2-已驳回, 3-已完成'," +
+                "audit_opinion VARCHAR(500) COMMENT '审核意见'," +
+                "issue_material_desc VARCHAR(500) COMMENT '故障材料说明'," +
+                "issue_material_url TEXT COMMENT '故障材料文件URL(可为JSON数组)'," +
+                "completion_material_desc VARCHAR(500) COMMENT '完工材料说明'," +
+                "completion_material_url TEXT COMMENT '完工材料文件URL(可为JSON数组)'," +
+                "complete_time DATETIME" +
+                ")");
         try {
-            jdbcTemplate.execute("ALTER TABLE maintenance_record ADD COLUMN status INT DEFAULT 0 COMMENT '状态: 0-待审核, 1-已通过, 2-已驳回'");
-            System.out.println("Added status to maintenance_record");
-        } catch (Exception e) {
-             System.out.println("status column might already exist in maintenance_record");
+            jdbcTemplate.execute("ALTER TABLE maintenance_record ADD COLUMN status INT DEFAULT 0 COMMENT '状态: 0-待审核, 1-已通过, 2-已驳回, 3-已完成'");
+        } catch (Exception ignored) {
+        }
+        try {
+            jdbcTemplate.execute("ALTER TABLE maintenance_record ADD COLUMN audit_opinion VARCHAR(500) COMMENT '审核意见'");
+        } catch (Exception ignored) {
+        }
+        try {
+            jdbcTemplate.execute("ALTER TABLE maintenance_record ADD COLUMN issue_material_desc VARCHAR(500) COMMENT '故障材料说明'");
+        } catch (Exception ignored) {
+        }
+        try {
+            jdbcTemplate.execute("ALTER TABLE maintenance_record ADD COLUMN issue_material_url TEXT COMMENT '故障材料文件URL(可为JSON数组)'");
+        } catch (Exception ignored) {
+        }
+        try {
+            jdbcTemplate.execute("ALTER TABLE maintenance_record ADD COLUMN completion_material_desc VARCHAR(500) COMMENT '完工材料说明'");
+        } catch (Exception ignored) {
+        }
+        try {
+            jdbcTemplate.execute("ALTER TABLE maintenance_record ADD COLUMN completion_material_url TEXT COMMENT '完工材料文件URL(可为JSON数组)'");
+        } catch (Exception ignored) {
+        }
+        try {
+            jdbcTemplate.execute("ALTER TABLE maintenance_record ADD COLUMN complete_time DATETIME");
+        } catch (Exception ignored) {
         }
     }
 }

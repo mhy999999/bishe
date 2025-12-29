@@ -43,6 +43,63 @@ export function saveRecycling(data) {
   })
 }
 
+export function applyRecycling(data) {
+  return request({
+    url: '/trace/recycling/apply',
+    method: 'post',
+    data
+  })
+}
+
+export function auditRecycling(data) {
+  return request({
+    url: '/trace/recycling/audit',
+    method: 'post',
+    data
+  })
+}
+
+export function uploadRecyclingPhoto(formData) {
+  return request({
+    url: '/trace/recycling/photo/upload',
+    method: 'post',
+    data: formData,
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+}
+
+export function uploadRecyclingReport(formData) {
+  return request({
+    url: '/trace/recycling/report/upload',
+    method: 'post',
+    data: formData,
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+}
+
+export function calcRecyclingValuation(data) {
+  return request({
+    url: '/trace/recycling/valuation/calc',
+    method: 'post',
+    data
+  })
+}
+
+export function confirmRecyclingPrice(data) {
+  return request({
+    url: '/trace/recycling/valuation/confirm',
+    method: 'post',
+    data
+  })
+}
+
+export function getRecyclingReceipt(appraisalId) {
+  return request({
+    url: '/trace/recycling/receipt/' + appraisalId,
+    method: 'get'
+  })
+}
+
 // 维修记录
 export function getMaintenanceList(params) {
   return request({

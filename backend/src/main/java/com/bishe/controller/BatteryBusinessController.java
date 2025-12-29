@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.bishe.common.Result;
 import com.bishe.entity.*;
 import com.bishe.service.*;
+import cn.hutool.json.JSONUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import org.apache.poi.hwpf.HWPFDocument;
 import org.apache.poi.hwpf.extractor.WordExtractor;
@@ -507,6 +508,12 @@ public class BatteryBusinessController {
         if (!StringUtils.hasText(record.getDescription())) {
             return Result.error(400, "维修内容不能为空");
         }
+        if (!StringUtils.hasText(record.getIssueMaterialDesc())) {
+            return Result.error(400, "故障材料说明不能为空");
+        }
+        if (!StringUtils.hasText(record.getIssueMaterialUrl())) {
+            record.setIssueMaterialUrl("[]");
+        }
         BatteryInfo battery = batteryInfoService.getById(record.getBatteryId());
         if (battery == null) {
             return Result.error(400, "电池不存在");
@@ -564,6 +571,15 @@ public class BatteryBusinessController {
             return Result.error(400, "维修人不能为空");
         }
 
+        String issueMaterialDescToUse = StringUtils.hasText(record.getIssueMaterialDesc()) ? record.getIssueMaterialDesc() : existing.getIssueMaterialDesc();
+        String issueMaterialUrlToUse = StringUtils.hasText(record.getIssueMaterialUrl()) ? record.getIssueMaterialUrl() : existing.getIssueMaterialUrl();
+        if (!StringUtils.hasText(issueMaterialDescToUse)) {
+            return Result.error(400, "故障材料说明不能为空");
+        }
+        if (!StringUtils.hasText(issueMaterialUrlToUse)) {
+            issueMaterialUrlToUse = "[]";
+        }
+
         com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<MaintenanceRecord> updateWrapper =
                 new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<>();
         updateWrapper.eq(MaintenanceRecord::getRecordId, record.getRecordId());
@@ -576,11 +592,105 @@ public class BatteryBusinessController {
         updateWrapper.set(record.getReplaceParts() != null, MaintenanceRecord::getReplaceParts, record.getReplaceParts());
         updateWrapper.set(StringUtils.hasText(record.getMaintainer()), MaintenanceRecord::getMaintainer, record.getMaintainer());
         updateWrapper.set(!StringUtils.hasText(existing.getMaintainer()), MaintenanceRecord::getMaintainer, maintainerToUse);
+        updateWrapper.set(MaintenanceRecord::getIssueMaterialDesc, issueMaterialDescToUse);
+        updateWrapper.set(MaintenanceRecord::getIssueMaterialUrl, issueMaterialUrlToUse);
         boolean success = maintenanceRecordService.update(updateWrapper);
         if (success) {
             sysAuditService.submitAudit("MAINTENANCE", record.getRecordId().toString(), maintainerToUse);
         }
         return Result.success(success);
+    }
+
+    @PostMapping("/maintenance/complete")
+    public Result<Boolean> completeMaintenance(@RequestBody MaintenanceCompleteDto dto, HttpServletRequest request) {
+        Long userId = getCurrentUserId(request);
+        if (!hasAnyRole(userId, "admin", "maintainer", "maintenance")) {
+            return forbidden();
+        }
+        if (dto == null || dto.getRecordId() == null) {
+            return Result.error(400, "记录ID不能为空");
+        }
+        String solution = dto.getSolution();
+        if (!StringUtils.hasText(solution)) {
+            return Result.error(400, "解决方案不能为空");
+        }
+        String completionDesc = dto.getCompletionMaterialDesc();
+        if (!StringUtils.hasText(completionDesc)) {
+            return Result.error(400, "完工材料说明不能为空");
+        }
+        String completionUrl = dto.getCompletionMaterialUrl();
+        if (!StringUtils.hasText(completionUrl)) {
+            return Result.error(400, "完工材料文件不能为空");
+        }
+        try {
+            java.util.List<String> urls = JSONUtil.parseArray(completionUrl).toList(String.class);
+            if (urls == null || urls.isEmpty()) {
+                return Result.error(400, "完工材料文件不能为空");
+            }
+        } catch (Exception e) {
+            return Result.error(400, "完工材料文件格式不合法");
+        }
+
+        MaintenanceRecord existing = maintenanceRecordService.getById(dto.getRecordId());
+        if (existing == null) {
+            return Result.error(400, "记录不存在");
+        }
+        if (existing.getStatus() == null || existing.getStatus() != 1) {
+            return Result.error(400, "仅允许对已通过审核的维修记录提交完工材料");
+        }
+
+        MaintenanceRecord update = new MaintenanceRecord();
+        update.setRecordId(dto.getRecordId());
+        update.setSolution(solution.trim());
+        update.setCompletionMaterialDesc(completionDesc.trim());
+        update.setCompletionMaterialUrl(completionUrl.trim());
+        update.setCompleteTime(java.time.LocalDateTime.now());
+        update.setStatus(3);
+        return Result.success(maintenanceRecordService.updateById(update));
+    }
+
+    @PostMapping("/maintenance/material/upload")
+    public Result<String> uploadMaintenanceMaterial(@RequestParam("kind") String kind,
+                                                    @RequestParam("file") MultipartFile file,
+                                                    HttpServletRequest request) {
+        Long userId = getCurrentUserId(request);
+        if (!hasAnyRole(userId, "admin", "maintainer", "maintenance")) {
+            return forbidden();
+        }
+        String k = StringUtils.hasText(kind) ? kind.trim().toLowerCase() : "";
+        if (!Objects.equals(k, "issue") && !Objects.equals(k, "completion")) {
+            return Result.error(400, "材料类型不合法");
+        }
+        if (file == null || file.isEmpty()) {
+            return Result.error(400, "文件不能为空");
+        }
+        if (file.getSize() > 10L * 1024 * 1024) {
+            return Result.error(400, "文件大小不能超过10MB");
+        }
+        String originalFilename = file.getOriginalFilename();
+        String safeName = (originalFilename == null ? "file" : originalFilename)
+                .replace("\\", "_")
+                .replace("/", "_")
+                .replace("..", "_");
+        String savedName = UUID.randomUUID().toString().replace("-", "") + "_" + safeName;
+        Path targetDir = Paths.get(System.getProperty("user.dir"), "uploads", "maintenance", k);
+        try {
+            Files.createDirectories(targetDir);
+            Path targetFile = targetDir.resolve(savedName);
+            file.transferTo(targetFile.toFile());
+            String url = "/files/maintenance/" + k + "/" + savedName;
+            return Result.success(url);
+        } catch (Exception e) {
+            return Result.error(500, "上传失败");
+        }
+    }
+
+    @lombok.Data
+    public static class MaintenanceCompleteDto {
+        private Long recordId;
+        private String solution;
+        private String completionMaterialDesc;
+        private String completionMaterialUrl;
     }
 
     // ==================== 销售管理 (Sales) ====================

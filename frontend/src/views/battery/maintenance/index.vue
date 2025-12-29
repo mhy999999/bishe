@@ -1,11 +1,12 @@
 <template>
   <div class="app-container">
     <div class="filter-container">
-      <el-select v-model="listQuery.status" placeholder="审核状态" clearable class="filter-item"
+      <el-select v-model="listQuery.status" placeholder="状态" clearable class="filter-item"
         style="width: 150px; margin-right: 10px;">
         <el-option label="待审核" :value="0" />
         <el-option label="已通过" :value="1" />
         <el-option label="已驳回" :value="2" />
+        <el-option label="已完成" :value="3" />
       </el-select>
       <el-button class="filter-item" type="primary" icon="Search" @click="handleFilter">
         搜索
@@ -20,8 +21,39 @@
       <el-table-column label="电池ID" prop="batteryId" align="center" />
       <el-table-column label="故障类型" prop="faultType" align="center" />
       <el-table-column label="维修内容" prop="description" align="center" />
-      <el-table-column label="解决方案" prop="solution" align="center" />
+      <el-table-column label="解决方案" align="center">
+        <template #default="{ row }">
+          <span>{{ row?.solution || '-' }}</span>
+        </template>
+      </el-table-column>
       <el-table-column label="维修人" prop="maintainer" align="center" />
+      <el-table-column label="审核意见" align="center" min-width="180">
+        <template #default="{ row }">
+          <span>{{ row?.auditOpinion || '-' }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="故障材料" align="center" min-width="160">
+        <template #default="{ row }">
+          <template v-if="parseMaterialUrls(row?.issueMaterialUrl).length > 0">
+            <el-link v-for="(url, idx) in parseMaterialUrls(row?.issueMaterialUrl)" :key="url" type="primary"
+              :underline="false" style="margin: 0 6px;" @click="openFileInNewTab(url)">
+              文件{{ idx + 1 }}
+            </el-link>
+          </template>
+          <span v-else>-</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="完工材料" align="center" min-width="160">
+        <template #default="{ row }">
+          <template v-if="parseMaterialUrls(row?.completionMaterialUrl).length > 0">
+            <el-link v-for="(url, idx) in parseMaterialUrls(row?.completionMaterialUrl)" :key="url" type="primary"
+              :underline="false" style="margin: 0 6px;" @click="openFileInNewTab(url)">
+              文件{{ idx + 1 }}
+            </el-link>
+          </template>
+          <span v-else>-</span>
+        </template>
+      </el-table-column>
       <el-table-column label="状态" align="center">
         <template #default="{ row }">
           <el-tag :type="statusMap[row.status]?.type || 'info'">
@@ -29,11 +61,16 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" align="center" width="150" class-name="small-padding fixed-width">
+      <el-table-column label="操作" align="center" width="240" class-name="small-padding fixed-width">
         <template #default="{ row }">
-          <el-button v-if="row.status === 0" type="primary" size="small" @click="handleAudit(row)">
-            审核
+          <el-button v-if="row.status === 1" type="success" size="small" @click="handleComplete(row)">
+            提交完工
           </el-button>
+          <template v-else-if="row.status === 2">
+            <el-button type="primary" size="small" @click="handleRedo(row)">
+              重新维修
+            </el-button>
+          </template>
         </template>
       </el-table-column>
     </el-table>
@@ -41,7 +78,7 @@
     <pagination v-show="total > 0" :total="total" v-model:page="listQuery.pageNum" v-model:limit="listQuery.pageSize"
       @pagination="getList" />
 
-    <el-dialog title="新增维修记录" v-model="dialogFormVisible">
+    <el-dialog :title="dialogMode === 'edit' ? '重新维修' : '新增维修记录'" v-model="dialogFormVisible">
       <el-form ref="dataForm" :model="temp" :rules="rules" label-width="100px">
         <el-form-item label="电池ID" prop="batteryId">
           <el-input v-model="temp.batteryId" />
@@ -52,11 +89,17 @@
         <el-form-item label="维修内容" prop="description">
           <el-input v-model="temp.description" type="textarea" />
         </el-form-item>
-        <el-form-item label="解决方案">
-          <el-input v-model="temp.solution" type="textarea" />
-        </el-form-item>
         <el-form-item label="维修人">
           <el-input v-model="temp.maintainer" />
+        </el-form-item>
+        <el-form-item label="故障材料说明" prop="issueMaterialDesc">
+          <el-input v-model="temp.issueMaterialDesc" type="textarea" />
+        </el-form-item>
+        <el-form-item label="故障材料文件">
+          <el-upload v-model:file-list="issueMaterialFileList" :http-request="handleIssueMaterialUpload"
+            :on-remove="handleIssueMaterialRemove" multiple :limit="5" :on-exceed="handleIssueMaterialExceed">
+            <el-button type="primary">上传文件</el-button>
+          </el-upload>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -67,22 +110,25 @@
       </template>
     </el-dialog>
 
-    <el-dialog title="审核维修记录" v-model="dialogAuditVisible">
-      <el-form :model="auditTemp" label-width="100px">
-        <el-form-item label="审核结果">
-          <el-radio-group v-model="auditTemp.status">
-            <el-radio :label="1">通过</el-radio>
-            <el-radio :label="2">驳回</el-radio>
-          </el-radio-group>
+    <el-dialog title="提交完工材料" v-model="dialogCompleteVisible">
+      <el-form :model="completeTemp" label-width="100px">
+        <el-form-item label="解决方案">
+          <el-input v-model="completeTemp.solution" type="textarea" />
         </el-form-item>
-        <el-form-item label="审核意见">
-          <el-input v-model="auditTemp.auditOpinion" type="textarea" />
+        <el-form-item label="完工材料说明">
+          <el-input v-model="completeTemp.completionMaterialDesc" type="textarea" />
+        </el-form-item>
+        <el-form-item label="完工材料文件">
+          <el-upload v-model:file-list="completionMaterialFileList" :http-request="handleCompletionMaterialUpload"
+            :on-remove="handleCompletionMaterialRemove" multiple :limit="5" :on-exceed="handleCompletionMaterialExceed">
+            <el-button type="primary">上传文件</el-button>
+          </el-upload>
         </el-form-item>
       </el-form>
       <template #footer>
         <div class="dialog-footer">
-          <el-button @click="dialogAuditVisible = false">取消</el-button>
-          <el-button type="primary" @click="submitAudit">确认</el-button>
+          <el-button @click="dialogCompleteVisible = false">取消</el-button>
+          <el-button type="primary" @click="submitComplete">确认</el-button>
         </div>
       </template>
     </el-dialog>
@@ -91,7 +137,7 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { getMaintenanceList, saveMaintenance, auditMaintenance } from '@/api/battery'
+import { getMaintenanceList, saveMaintenance, updateMaintenance, uploadMaintenanceMaterial, completeMaintenance } from '@/api/battery'
 import Pagination from '@/components/Pagination/index.vue'
 import { ElMessage } from 'element-plus'
 
@@ -109,30 +155,142 @@ const listQuery = reactive({
 const statusMap = {
   0: { text: '待审核', type: 'warning' },
   1: { text: '已通过', type: 'success' },
-  2: { text: '已驳回', type: 'danger' }
+  2: { text: '已驳回', type: 'danger' },
+  3: { text: '已完成', type: 'info' }
 }
 
 const dialogFormVisible = ref(false)
+const dialogMode = ref('create')
 const temp = reactive({
+  recordId: undefined,
   batteryId: '',
   faultType: '',
   description: '',
-  solution: '',
-  maintainer: ''
+  maintainer: '',
+  issueMaterialDesc: '',
+  issueMaterialUrl: ''
 })
 
 const rules = {
   batteryId: [{ required: true, message: '电池ID必填', trigger: 'blur' }],
   faultType: [{ required: true, message: '故障类型必填', trigger: 'blur' }],
-  description: [{ required: true, message: '维修内容必填', trigger: 'blur' }]
+  description: [{ required: true, message: '维修内容必填', trigger: 'blur' }],
+  issueMaterialDesc: [{ required: true, message: '故障材料说明必填', trigger: 'blur' }]
 }
 
-const dialogAuditVisible = ref(false)
-const auditTemp = reactive({
+const parseMaterialUrls = (raw) => {
+  if (!raw) return []
+  if (Array.isArray(raw)) return raw.filter(Boolean)
+  if (typeof raw !== 'string') return []
+  const text = raw.trim()
+  if (!text) return []
+  try {
+    const parsed = JSON.parse(text)
+    if (Array.isArray(parsed)) return parsed.filter(Boolean)
+  } catch (e) {
+  }
+  if (text.includes(',')) {
+    return text.split(',').map(s => s.trim()).filter(Boolean)
+  }
+  return [text]
+}
+
+const openFileInNewTab = (url) => {
+  const text = String(url || '').trim()
+  if (!text) return
+  window.open(text, '_blank')
+}
+
+const issueMaterialUrls = ref([])
+const issueMaterialFileList = ref([])
+
+const syncIssueMaterialFileList = () => {
+  issueMaterialFileList.value = issueMaterialUrls.value.map((url, idx) => ({
+    name: `文件${idx + 1}`,
+    url,
+    status: 'success'
+  }))
+}
+
+const handleIssueMaterialExceed = () => {
+  ElMessage.warning('故障材料文件最多上传 5 个')
+}
+
+const handleIssueMaterialUpload = (options) => {
+  if (issueMaterialUrls.value.length >= 5) {
+    ElMessage.warning('故障材料文件最多上传 5 个')
+    options.onError && options.onError(new Error('文件数量超限'))
+    return
+  }
+  const formData = new FormData()
+  formData.append('file', options.file)
+  uploadMaintenanceMaterial('issue', formData).then((url) => {
+    if (issueMaterialUrls.value.length >= 5) {
+      ElMessage.warning('故障材料文件最多上传 5 个')
+      options.onError && options.onError(new Error('文件数量超限'))
+      return
+    }
+    issueMaterialUrls.value.push(url)
+    syncIssueMaterialFileList()
+    options.onSuccess && options.onSuccess({ url }, options.file)
+  }).catch((err) => {
+    options.onError && options.onError(err)
+  })
+}
+
+const handleIssueMaterialRemove = (uploadFile, uploadFiles) => {
+  issueMaterialUrls.value = (uploadFiles || []).map(f => f.url).filter(Boolean)
+  syncIssueMaterialFileList()
+}
+
+const dialogCompleteVisible = ref(false)
+const completeTemp = reactive({
   recordId: undefined,
-  status: 1,
-  auditOpinion: ''
+  solution: '',
+  completionMaterialDesc: '',
+  completionMaterialUrl: ''
 })
+const completionMaterialUrls = ref([])
+const completionMaterialFileList = ref([])
+
+const syncCompletionMaterialFileList = () => {
+  completionMaterialFileList.value = completionMaterialUrls.value.map((url, idx) => ({
+    name: `文件${idx + 1}`,
+    url,
+    status: 'success'
+  }))
+}
+
+const handleCompletionMaterialExceed = () => {
+  ElMessage.warning('完工材料文件最多上传 5 个')
+}
+
+const handleCompletionMaterialUpload = (options) => {
+  if (completionMaterialUrls.value.length >= 5) {
+    ElMessage.warning('完工材料文件最多上传 5 个')
+    options.onError && options.onError(new Error('文件数量超限'))
+    return
+  }
+  const formData = new FormData()
+  formData.append('file', options.file)
+  uploadMaintenanceMaterial('completion', formData).then((url) => {
+    if (completionMaterialUrls.value.length >= 5) {
+      ElMessage.warning('完工材料文件最多上传 5 个')
+      options.onError && options.onError(new Error('文件数量超限'))
+      return
+    }
+    completionMaterialUrls.value.push(url)
+    syncCompletionMaterialFileList()
+    options.onSuccess && options.onSuccess({ url }, options.file)
+  }).catch((err) => {
+    options.onError && options.onError(err)
+  })
+}
+
+const handleCompletionMaterialRemove = (uploadFile, uploadFiles) => {
+  completionMaterialUrls.value = (uploadFiles || []).map(f => f.url).filter(Boolean)
+  syncCompletionMaterialFileList()
+}
 
 const handleFilter = () => {
   listQuery.pageNum = 1
@@ -159,11 +317,29 @@ const getList = () => {
 }
 
 const handleCreate = () => {
+  dialogMode.value = 'create'
+  temp.recordId = undefined
   temp.batteryId = ''
   temp.faultType = ''
   temp.description = ''
-  temp.solution = ''
   temp.maintainer = ''
+  temp.issueMaterialDesc = ''
+  temp.issueMaterialUrl = ''
+  issueMaterialUrls.value = []
+  syncIssueMaterialFileList()
+  dialogFormVisible.value = true
+}
+
+const handleRedo = (row) => {
+  dialogMode.value = 'edit'
+  temp.recordId = row?.recordId
+  temp.batteryId = row?.batteryId || ''
+  temp.faultType = row?.faultType || ''
+  temp.description = row?.description || ''
+  temp.maintainer = row?.maintainer || ''
+  temp.issueMaterialDesc = row?.issueMaterialDesc || ''
+  issueMaterialUrls.value = parseMaterialUrls(row?.issueMaterialUrl)
+  syncIssueMaterialFileList()
   dialogFormVisible.value = true
 }
 
@@ -175,9 +351,15 @@ const createData = () => {
     if (!valid) {
       return
     }
-    saveMaintenance(temp).then(() => {
+    if (issueMaterialUrls.value.length <= 0) {
+      ElMessage.warning('请至少上传 1 个故障材料文件')
+      return
+    }
+    temp.issueMaterialUrl = JSON.stringify(issueMaterialUrls.value)
+    const action = dialogMode.value === 'edit' ? updateMaintenance : saveMaintenance
+    action(temp).then(() => {
       dialogFormVisible.value = false
-      ElMessage.success('创建成功，已提交审核')
+      ElMessage.success(dialogMode.value === 'edit' ? '已重新提交维修审核' : '创建成功，已提交审核')
       getList()
     }).catch((err) => {
       console.error(err)
@@ -185,17 +367,37 @@ const createData = () => {
   })
 }
 
-const handleAudit = (row) => {
-  auditTemp.recordId = row.recordId
-  auditTemp.status = 1
-  auditTemp.auditOpinion = ''
-  dialogAuditVisible.value = true
+const handleComplete = (row) => {
+  completeTemp.recordId = row?.recordId
+  completeTemp.solution = ''
+  completeTemp.completionMaterialDesc = ''
+  completeTemp.completionMaterialUrl = ''
+  completionMaterialUrls.value = []
+  syncCompletionMaterialFileList()
+  dialogCompleteVisible.value = true
 }
 
-const submitAudit = () => {
-  auditMaintenance(auditTemp).then(() => {
-    dialogAuditVisible.value = false
-    ElMessage.success('审核完成')
+const submitComplete = () => {
+  const solution = String(completeTemp.solution || '').trim()
+  if (!solution) {
+    ElMessage.warning('解决方案不能为空')
+    return
+  }
+  const desc = String(completeTemp.completionMaterialDesc || '').trim()
+  if (!desc) {
+    ElMessage.warning('完工材料说明不能为空')
+    return
+  }
+  if (completionMaterialUrls.value.length <= 0) {
+    ElMessage.warning('请至少上传 1 个完工材料文件')
+    return
+  }
+  completeTemp.solution = solution
+  completeTemp.completionMaterialDesc = desc
+  completeTemp.completionMaterialUrl = JSON.stringify(completionMaterialUrls.value)
+  completeMaintenance(completeTemp).then(() => {
+    dialogCompleteVisible.value = false
+    ElMessage.success('已提交完工材料')
     getList()
   }).catch((err) => {
     console.error(err)

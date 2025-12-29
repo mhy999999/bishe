@@ -9,6 +9,7 @@ com\bishe\service\IChainTransactionService.class
 com\bishe\common\GlobalExceptionHandler.class
 com\bishe\interceptor\JwtInterceptor.class
 com\bishe\entity\BatteryTransferRecord.class
+com\bishe\controller\TraceabilityController$RecyclingApplyDto.class
 com\bishe\service\IBatteryInfoService.class
 com\bishe\controller\AuditController.class
 com\bishe\mapper\SysRoleMapper.class
@@ -20,6 +21,7 @@ com\bishe\service\ISysDeptService.class
 com\bishe\controller\SystemController$UserListVo.class
 com\bishe\entity\SalesRecord.class
 com\bishe\mapper\SysAuditMapper.class
+com\bishe\controller\TraceabilityController$RecyclingAuditDto.class
 com\bishe\entity\BatteryInfo.class
 com\bishe\entity\ChainTransaction.class
 com\bishe\controller\TraceabilityController.class
@@ -40,6 +42,7 @@ com\bishe\service\IRecyclingAppraisalService.class
 com\bishe\controller\SystemController.class
 com\bishe\entity\SysUser.class
 com\bishe\service\ISysMenuService.class
+com\bishe\controller\TraceabilityController$RecyclingValuationConfirmDto.class
 com\bishe\service\IBatteryAlarmService.class
 com\bishe\service\impl\SysDeptServiceImpl.class
 com\bishe\entity\SysMenu.class
@@ -61,6 +64,7 @@ com\bishe\mapper\RecyclingAppraisalMapper.class
 com\bishe\controller\SystemController$MenuNode.class
 com\bishe\service\impl\MaintenanceRecordServiceImpl.class
 com\bishe\mapper\QualityInspectionMapper.class
+com\bishe\controller\BatteryBusinessController$MaintenanceCompleteDto.class
 com\bishe\BisheApplication$1$1.class
 com\bishe\common\Result.class
 com\bishe\service\impl\SysUserServiceImpl.class
@@ -77,5 +81,6 @@ com\bishe\service\impl\SysAuditServiceImpl.class
 com\bishe\mapper\SysDeptMapper.class
 com\bishe\service\impl\SysRoleServiceImpl.class
 com\bishe\service\IVehicleInfoService.class
+com\bishe\controller\TraceabilityController$RecyclingValuationCalcDto.class
 com\bishe\mapper\SysMenuMapper.class
 com\bishe\entity\BatteryAlarm.class
