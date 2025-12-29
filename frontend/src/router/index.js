@@ -182,27 +182,21 @@ export const asyncRoutes = [
   {
     path: '/maintenance',
     component: Layout,
-    redirect: '/maintenance/monitor',
+    redirect: '/maintenance/record',
     name: 'MaintenanceManage',
     meta: { title: '售后服务', icon: 'FirstAidKit', roles: ['admin', 'maintenance'] },
     children: [
       {
-        path: 'monitor',
-        name: 'HealthMonitor',
-        component: () => import('@/views/maintenance/monitor/index.vue'),
-        meta: { title: '健康监测', icon: 'DataLine', roles: ['admin', 'maintenance'] }
-      },
-      {
         path: 'record',
         name: 'MaintenanceRecord',
         component: () => import('@/views/maintenance/record/index.vue'),
-        meta: { title: '维修记录', icon: 'Document', roles: ['admin', 'maintenance'] }
+        meta: { title: '售后工单', icon: 'Document', roles: ['admin', 'maintenance'] }
       },
       {
-        path: 'alarm',
-        name: 'BatteryAlarm',
-        component: () => import('@/views/maintenance/alarm/index.vue'),
-        meta: { title: '故障报警', icon: 'Warning', roles: ['admin', 'maintenance'] }
+        path: 'audit',
+        name: 'AfterSalesAudit',
+        component: () => import('@/views/battery/maintenance/audit.vue'),
+        meta: { title: '工单审核', icon: 'Stamp', roles: ['admin', 'maintenance'] }
       }
     ]
   },

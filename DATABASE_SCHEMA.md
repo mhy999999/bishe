@@ -139,28 +139,6 @@
 | create_time | DATETIME | | 是 | 维修时间 | |
 | tx_hash | VARCHAR | 66 | 否 | 交易哈希 | 上链凭证 |
 
-### 3.3 `health_monitor` (健康监测表)
-| 字段名 | 类型 | 长度 | 必填 | 描述 | 备注 |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| id | BIGINT | 20 | 是 | ID | 主键, 自增 |
-| battery_id | VARCHAR | 64 | 是 | 电池ID | 关联 battery_info |
-| soc | DECIMAL | 5,2 | 是 | 剩余电量 | % |
-| soh | DECIMAL | 5,2 | 是 | 健康状态 | % |
-| cycle_count | INT | 11 | 是 | 循环次数 | |
-| max_temp | DECIMAL | 5,2 | 否 | 最高温度 | ℃ |
-| min_temp | DECIMAL | 5,2 | 否 | 最低温度 | ℃ |
-| report_time | DATETIME | | 是 | 上报时间 | |
-
-### 3.4 `battery_alarm` (故障报警表)
-| 字段名 | 类型 | 长度 | 必填 | 描述 | 备注 |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| alarm_id | BIGINT | 20 | 是 | 报警ID | 主键, 自增 |
-| battery_id | VARCHAR | 64 | 是 | 电池ID | 关联 battery_info |
-| alarm_level | VARCHAR | 10 | 是 | 报警等级 | 1:一般, 2:严重, 3:紧急 |
-| alarm_content | VARCHAR | 200 | 是 | 报警内容 | |
-| status | INT | 1 | 是 | 处理状态 | 0:未处理, 1:已处理 |
-| create_time | DATETIME | | 是 | 报警时间 | |
-
 ---
 
 ## 4. 回收与利用模块 (Recycling)

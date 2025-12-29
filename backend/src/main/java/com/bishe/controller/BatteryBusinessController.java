@@ -25,7 +25,7 @@ import java.util.UUID;
 
 /**
  * 电池业务统一控制器
- * 包含: 电池信息, 生产批次, 质检记录, 健康监测, 故障报警, 维修保养, 销售管理
+ * 包含: 电池信息, 生产批次, 质检记录, 健康监测, 维修保养, 销售管理
  */
 @RestController
 @RequestMapping("/battery")
@@ -37,10 +37,6 @@ public class BatteryBusinessController {
     private IProductionBatchService productionBatchService;
     @Autowired
     private IQualityInspectionService qualityInspectionService;
-    @Autowired
-    private IHealthMonitorService healthMonitorService;
-    @Autowired
-    private IBatteryAlarmService batteryAlarmService;
     @Autowired
     private IMaintenanceRecordService maintenanceRecordService;
     @Autowired
@@ -392,47 +388,6 @@ public class BatteryBusinessController {
             }
         }
         return Result.success(true);
-    }
-
-    // ==================== 健康监测 (HealthMonitor) ====================
-
-    @GetMapping("/health/list")
-    public Result<Page<HealthMonitor>> listHealth(@RequestParam(defaultValue = "1") Integer pageNum,
-                                                  @RequestParam(defaultValue = "10") Integer pageSize,
-                                                  @RequestParam(required = false) String batteryId) {
-        Page<HealthMonitor> page = new Page<>(pageNum, pageSize);
-        LambdaQueryWrapper<HealthMonitor> wrapper = new LambdaQueryWrapper<>();
-        wrapper.like(StringUtils.hasText(batteryId), HealthMonitor::getBatteryId, batteryId);
-        wrapper.orderByDesc(HealthMonitor::getReportTime);
-        return Result.success(healthMonitorService.page(page, wrapper));
-    }
-
-    @PostMapping("/health")
-    public Result<Boolean> saveHealth(@RequestBody HealthMonitor monitor) {
-        return Result.success(healthMonitorService.save(monitor));
-    }
-
-    // ==================== 故障报警 (BatteryAlarm) ====================
-
-    @GetMapping("/alarm/list")
-    public Result<Page<BatteryAlarm>> listAlarm(@RequestParam(defaultValue = "1") Integer pageNum,
-                                                @RequestParam(defaultValue = "10") Integer pageSize,
-                                                @RequestParam(required = false) String batteryId) {
-        Page<BatteryAlarm> page = new Page<>(pageNum, pageSize);
-        LambdaQueryWrapper<BatteryAlarm> wrapper = new LambdaQueryWrapper<>();
-        wrapper.like(StringUtils.hasText(batteryId), BatteryAlarm::getBatteryId, batteryId);
-        wrapper.orderByDesc(BatteryAlarm::getCreateTime);
-        return Result.success(batteryAlarmService.page(page, wrapper));
-    }
-
-    @PostMapping("/alarm")
-    public Result<Boolean> saveAlarm(@RequestBody BatteryAlarm alarm) {
-        return Result.success(batteryAlarmService.save(alarm));
-    }
-
-    @PutMapping("/alarm")
-    public Result<Boolean> updateAlarm(@RequestBody BatteryAlarm alarm) {
-        return Result.success(batteryAlarmService.updateById(alarm));
     }
 
     // ==================== 维修保养 (Maintenance) ====================

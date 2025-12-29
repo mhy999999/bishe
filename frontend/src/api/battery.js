@@ -57,23 +57,6 @@ export function auditQuality(data) {
   })
 }
 
-// 健康监测
-export function getHealthList(params) {
-  return request({
-    url: '/battery/health/list',
-    method: 'get',
-    params
-  })
-}
-
-export function saveHealth(data) {
-  return request({
-    url: '/battery/health',
-    method: 'post',
-    data
-  })
-}
-
 // 生产批次
 export function getBatchList(params) {
   return request({
@@ -95,15 +78,6 @@ export function saveBatch(data) {
     url: '/battery/batch',
     method: 'post',
     data
-  })
-}
-
-// 故障报警
-export function getAlarmList(params) {
-  return request({
-    url: '/battery/alarm/list',
-    method: 'get',
-    params
   })
 }
 
