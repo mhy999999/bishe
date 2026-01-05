@@ -83,10 +83,12 @@ import { getTransferList, saveTransfer } from '@/api/trace'
 import Pagination from '@/components/Pagination/index.vue'
 import { ElMessage } from 'element-plus'
 import { InfoFilled } from '@element-plus/icons-vue'
+import { useRoute } from 'vue-router'
 
 const list = ref(null)
 const total = ref(0)
 const listLoading = ref(true)
+const route = useRoute()
 const listQuery = reactive({
   pageNum: 1,
   pageSize: 10,
@@ -155,5 +157,18 @@ const createData = () => {
 
 onMounted(() => {
   getList()
+
+  const batteryId = route.query?.batteryId
+  if (batteryId != null && String(batteryId).trim()) {
+    listQuery.batteryId = String(batteryId).trim()
+    temp.batteryId = String(batteryId).trim()
+  }
+  const action = String(route.query?.action || '').trim().toLowerCase()
+  const openCreate = route.query?.openCreate
+  const create = route.query?.create
+  const shouldOpenCreate = action === 'create' || openCreate === '1' || create === '1'
+  if (shouldOpenCreate) {
+    dialogFormVisible.value = true
+  }
 })
 </script>

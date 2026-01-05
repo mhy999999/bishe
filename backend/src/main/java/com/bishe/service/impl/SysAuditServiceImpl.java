@@ -100,6 +100,8 @@ public class SysAuditServiceImpl extends ServiceImpl<SysAuditMapper, SysAudit> i
             update.setRecordId(Long.parseLong(businessId));
             update.setStatus(status);
             update.setAuditOpinion(auditOpinion);
+            update.setAuditor(auditor);
+            update.setAuditTime(audit.getAuditTime());
             maintenanceRecordService.updateById(update);
         } else if ("SALES".equals(businessType)) {
             SalesRecord sales = salesRecordService.getById(Long.parseLong(businessId));

@@ -147,7 +147,11 @@ const apiBase = computed(() => (import.meta.env.VITE_APP_BASE_API || '/api').rep
 const docPreviewUrl = computed(() => {
   const url = resolvedUrl.value
   if (!url) return ''
-  return `${apiBase.value}/battery/sales/material/preview/doc?url=${encodeURIComponent(url)}`
+  const lower = url.toLowerCase()
+  const endpoint = lower.includes('/files/maintenance/')
+    ? '/battery/maintenance/material/preview/doc'
+    : '/battery/sales/material/preview/doc'
+  return `${apiBase.value}${endpoint}?url=${encodeURIComponent(url)}`
 })
 
 const goBack = () => {

@@ -395,6 +395,7 @@ public class BatteryBusinessController {
     @GetMapping("/maintenance/list")
     public Result<Page<MaintenanceRecord>> listMaintenance(@RequestParam(defaultValue = "1") Integer pageNum,
                                                          @RequestParam(defaultValue = "10") Integer pageSize,
+                                                         @RequestParam(required = false) String batteryId,
                                                          @RequestParam(required = false) Integer status,
                                                          HttpServletRequest request) {
         Long userId = getCurrentUserId(request);
@@ -403,6 +404,7 @@ public class BatteryBusinessController {
         }
         Page<MaintenanceRecord> page = new Page<>(pageNum, pageSize);
         LambdaQueryWrapper<MaintenanceRecord> wrapper = new LambdaQueryWrapper<>();
+        wrapper.like(StringUtils.hasText(batteryId), MaintenanceRecord::getBatteryId, batteryId);
         wrapper.eq(status != null, MaintenanceRecord::getStatus, status);
         wrapper.orderByDesc(MaintenanceRecord::getCreateTime);
         return Result.success(maintenanceRecordService.page(page, wrapper));
@@ -440,6 +442,8 @@ public class BatteryBusinessController {
             if (record == null) return Result.error("记录不存在");
             record.setStatus(auditData.getStatus());
             record.setAuditOpinion(auditData.getAuditOpinion());
+            record.setAuditor(auditor);
+            record.setAuditTime(java.time.LocalDateTime.now());
             maintenanceRecordService.updateById(record);
         }
         return Result.success(true);
@@ -469,12 +473,28 @@ public class BatteryBusinessController {
         if (!StringUtils.hasText(record.getIssueMaterialUrl())) {
             record.setIssueMaterialUrl("[]");
         }
+
+        if (record.getStationId() == null) {
+            SysUser user = userId != null ? sysUserService.getById(userId) : null;
+            if (user != null) {
+                record.setStationId(user.getDeptId());
+            }
+        }
+        if (record.getStationId() == null) {
+            return Result.error(400, "维修站ID不能为空（当前账号未绑定部门）");
+        }
         BatteryInfo battery = batteryInfoService.getById(record.getBatteryId());
         if (battery == null) {
             return Result.error(400, "电池不存在");
         }
         if (battery.getStatus() != null && (battery.getStatus() == 2 || battery.getStatus() == 6)) {
             return Result.error(400, "当前电池状态不允许提交维修");
+        }
+        LambdaQueryWrapper<MaintenanceRecord> pendingWrapper = new LambdaQueryWrapper<>();
+        pendingWrapper.eq(MaintenanceRecord::getBatteryId, record.getBatteryId());
+        pendingWrapper.eq(MaintenanceRecord::getStatus, 0);
+        if (maintenanceRecordService.count(pendingWrapper) > 0) {
+            return Result.error(400, "该电池已有待审核维修记录");
         }
         if (!StringUtils.hasText(record.getMaintainer())) {
             record.setMaintainer(getCurrentUserDisplayName(request));
@@ -483,6 +503,9 @@ public class BatteryBusinessController {
             return Result.error(400, "维修人不能为空");
         }
         record.setStatus(0);
+        record.setAuditOpinion(null);
+        record.setAuditor(null);
+        record.setAuditTime(null);
         if (record.getCreateTime() == null) record.setCreateTime(java.time.LocalDateTime.now());
         boolean success = maintenanceRecordService.save(record);
         if (success) {
@@ -518,6 +541,13 @@ public class BatteryBusinessController {
         if (battery.getStatus() != null && (battery.getStatus() == 2 || battery.getStatus() == 6)) {
             return Result.error(400, "当前电池状态不允许提交维修");
         }
+        LambdaQueryWrapper<MaintenanceRecord> pendingWrapper = new LambdaQueryWrapper<>();
+        pendingWrapper.eq(MaintenanceRecord::getBatteryId, batteryIdToUse);
+        pendingWrapper.eq(MaintenanceRecord::getStatus, 0);
+        pendingWrapper.ne(MaintenanceRecord::getRecordId, record.getRecordId());
+        if (maintenanceRecordService.count(pendingWrapper) > 0) {
+            return Result.error(400, "该电池已有待审核维修记录");
+        }
         String maintainerToUse = StringUtils.hasText(record.getMaintainer()) ? record.getMaintainer() : existing.getMaintainer();
         if (!StringUtils.hasText(maintainerToUse)) {
             maintainerToUse = getCurrentUserDisplayName(request);
@@ -539,6 +569,9 @@ public class BatteryBusinessController {
                 new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<>();
         updateWrapper.eq(MaintenanceRecord::getRecordId, record.getRecordId());
         updateWrapper.set(MaintenanceRecord::getStatus, 0);
+        updateWrapper.set(MaintenanceRecord::getAuditOpinion, null);
+        updateWrapper.set(MaintenanceRecord::getAuditor, null);
+        updateWrapper.set(MaintenanceRecord::getAuditTime, null);
         updateWrapper.set(StringUtils.hasText(record.getBatteryId()), MaintenanceRecord::getBatteryId, record.getBatteryId());
         updateWrapper.set(record.getStationId() != null, MaintenanceRecord::getStationId, record.getStationId());
         updateWrapper.set(StringUtils.hasText(record.getFaultType()), MaintenanceRecord::getFaultType, record.getFaultType());
@@ -653,6 +686,7 @@ public class BatteryBusinessController {
     @GetMapping("/sales/list")
     public Result<Page<SalesRecord>> listSales(@RequestParam(defaultValue = "1") Integer pageNum,
                                                @RequestParam(defaultValue = "10") Integer pageSize,
+                                               @RequestParam(required = false) String batteryId,
                                                @RequestParam(required = false) Integer status,
                                                HttpServletRequest request) {
         Long userId = getCurrentUserId(request);
@@ -661,6 +695,7 @@ public class BatteryBusinessController {
         }
         Page<SalesRecord> page = new Page<>(pageNum, pageSize);
         LambdaQueryWrapper<SalesRecord> wrapper = new LambdaQueryWrapper<>();
+        wrapper.like(StringUtils.hasText(batteryId), SalesRecord::getBatteryId, batteryId);
         wrapper.eq(status != null, SalesRecord::getStatus, status);
         wrapper.orderByDesc(SalesRecord::getSalesDate);
         return Result.success(salesRecordService.page(page, wrapper));
@@ -893,6 +928,70 @@ public class BatteryBusinessController {
         }
 
         Path targetDir = Paths.get(System.getProperty("user.dir"), "uploads", "sales").normalize();
+        Path targetFile = targetDir.resolve(fileName).normalize();
+        if (!targetFile.startsWith(targetDir)) {
+            return Result.error(400, "非法文件路径");
+        }
+        if (!Files.exists(targetFile) || !Files.isRegularFile(targetFile)) {
+            return Result.error(404, "文件不存在");
+        }
+        try (InputStream in = Files.newInputStream(targetFile);
+             HWPFDocument doc = new HWPFDocument(in);
+             WordExtractor extractor = new WordExtractor(doc)) {
+            String content = extractor.getText();
+            if (content == null) {
+                content = "";
+            }
+            content = content.replace("\u0000", "");
+            return Result.success(content);
+        } catch (Exception e) {
+            return Result.error(500, "预览解析失败");
+        }
+    }
+
+    @GetMapping("/maintenance/material/preview/doc")
+    public Result<String> previewMaintenanceMaterialDoc(@RequestParam("url") String url, HttpServletRequest request) {
+        Long userId = getCurrentUserId(request);
+        if (!hasAnyRole(userId, "admin", "maintainer", "maintenance")) {
+            return forbidden();
+        }
+        if (!StringUtils.hasText(url)) {
+            return Result.error(400, "文件地址不能为空");
+        }
+        String text = url.trim();
+        int qIndex = text.indexOf('?');
+        if (qIndex >= 0) {
+            text = text.substring(0, qIndex);
+        }
+        int marker = text.indexOf("/files/maintenance/");
+        String rest = marker >= 0 ? text.substring(marker + "/files/maintenance/".length()) : text;
+        if (rest.startsWith("/")) {
+            rest = rest.substring(1);
+        }
+        if (!StringUtils.hasText(rest)) {
+            return Result.error(400, "文件名不能为空");
+        }
+        if (rest.contains("..") || rest.contains("\\")) {
+            return Result.error(400, "非法文件路径");
+        }
+        if (!rest.toLowerCase().endsWith(".doc")) {
+            return Result.error(400, "仅支持doc格式预览");
+        }
+
+        String[] parts = rest.split("/", 2);
+        if (parts.length != 2) {
+            return Result.error(400, "非法文件路径");
+        }
+        String kind = parts[0];
+        String fileName = parts[1];
+        if (!Objects.equals(kind, "issue") && !Objects.equals(kind, "completion")) {
+            return Result.error(400, "材料类型不合法");
+        }
+        if (!StringUtils.hasText(fileName) || fileName.contains("/") || fileName.contains("..") || fileName.contains("\\")) {
+            return Result.error(400, "非法文件路径");
+        }
+
+        Path targetDir = Paths.get(System.getProperty("user.dir"), "uploads", "maintenance", kind).normalize();
         Path targetFile = targetDir.resolve(fileName).normalize();
         if (!targetFile.startsWith(targetDir)) {
             return Result.error(400, "非法文件路径");

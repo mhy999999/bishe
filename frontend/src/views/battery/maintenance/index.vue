@@ -1,6 +1,8 @@
 <template>
   <div class="app-container">
     <div class="filter-container">
+      <el-input v-model="listQuery.batteryId" placeholder="电池ID" clearable class="filter-item"
+        style="width: 200px; margin-right: 10px;" @keyup.enter="handleFilter" />
       <el-select v-model="listQuery.status" placeholder="状态" clearable class="filter-item"
         style="width: 150px; margin-right: 10px;">
         <el-option label="待审核" :value="0" />
@@ -32,11 +34,21 @@
           <span>{{ row?.auditOpinion || '-' }}</span>
         </template>
       </el-table-column>
+      <el-table-column label="审核人" align="center" width="120">
+        <template #default="{ row }">
+          <span>{{ row?.auditor || '-' }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="审核时间" align="center" width="180">
+        <template #default="{ row }">
+          <span>{{ row?.auditTime || '-' }}</span>
+        </template>
+      </el-table-column>
       <el-table-column label="故障材料" align="center" min-width="160">
         <template #default="{ row }">
           <template v-if="parseMaterialUrls(row?.issueMaterialUrl).length > 0">
             <el-link v-for="(url, idx) in parseMaterialUrls(row?.issueMaterialUrl)" :key="url" type="primary"
-              :underline="false" style="margin: 0 6px;" @click="openFileInNewTab(url)">
+              :underline="false" style="margin: 0 6px;" @click="openMaterialPreview(url)">
               文件{{ idx + 1 }}
             </el-link>
           </template>
@@ -47,7 +59,7 @@
         <template #default="{ row }">
           <template v-if="parseMaterialUrls(row?.completionMaterialUrl).length > 0">
             <el-link v-for="(url, idx) in parseMaterialUrls(row?.completionMaterialUrl)" :key="url" type="primary"
-              :underline="false" style="margin: 0 6px;" @click="openFileInNewTab(url)">
+              :underline="false" style="margin: 0 6px;" @click="openMaterialPreview(url)">
               文件{{ idx + 1 }}
             </el-link>
           </template>
@@ -81,7 +93,11 @@
     <el-dialog :title="dialogMode === 'edit' ? '重新维修' : '新增维修记录'" v-model="dialogFormVisible">
       <el-form ref="dataForm" :model="temp" :rules="rules" label-width="100px">
         <el-form-item label="电池ID" prop="batteryId">
-          <el-input v-model="temp.batteryId" />
+          <el-select v-model="temp.batteryId" filterable placeholder="请选择电池ID" :loading="batteryLoading"
+            style="width: 100%;">
+            <el-option v-for="item in batteryOptions" :key="item.batteryId" :label="item.batteryId"
+              :value="item.batteryId" />
+          </el-select>
         </el-form-item>
         <el-form-item label="故障类型" prop="faultType">
           <el-input v-model="temp.faultType" />
@@ -90,7 +106,7 @@
           <el-input v-model="temp.description" type="textarea" />
         </el-form-item>
         <el-form-item label="维修人">
-          <el-input v-model="temp.maintainer" />
+          <el-input v-model="temp.maintainer" placeholder="默认使用当前账号" />
         </el-form-item>
         <el-form-item label="故障材料说明" prop="issueMaterialDesc">
           <el-input v-model="temp.issueMaterialDesc" type="textarea" />
@@ -137,11 +153,16 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { getMaintenanceList, saveMaintenance, updateMaintenance, uploadMaintenanceMaterial, completeMaintenance } from '@/api/battery'
+import { getMaintenanceList, saveMaintenance, updateMaintenance, uploadMaintenanceMaterial, completeMaintenance, getBatteryList } from '@/api/battery'
 import Pagination from '@/components/Pagination/index.vue'
 import { ElMessage } from 'element-plus'
+import { useUserStore } from '@/store/user'
+import { useRoute, useRouter } from 'vue-router'
 
 const dataForm = ref()
+const userStore = useUserStore()
+const route = useRoute()
+const router = useRouter()
 
 const list = ref([])
 const total = ref(0)
@@ -149,6 +170,7 @@ const listLoading = ref(true)
 const listQuery = reactive({
   pageNum: 1,
   pageSize: 10,
+  batteryId: undefined,
   status: undefined
 })
 
@@ -170,6 +192,23 @@ const temp = reactive({
   issueMaterialDesc: '',
   issueMaterialUrl: ''
 })
+
+const batteryOptions = ref([])
+const batteryLoading = ref(false)
+
+const loadMaintainableBatteries = () => {
+  batteryLoading.value = true
+  return getBatteryList({ pageNum: 1, pageSize: 1000 }).then((response) => {
+    const pageData = response?.data || response
+    const records = pageData?.records || []
+    batteryOptions.value = records.filter(b => b && b.batteryId && b.status !== 2 && b.status !== 6)
+    batteryLoading.value = false
+  }).catch((err) => {
+    console.error(err)
+    batteryOptions.value = []
+    batteryLoading.value = false
+  })
+}
 
 const rules = {
   batteryId: [{ required: true, message: '电池ID必填', trigger: 'blur' }],
@@ -195,10 +234,11 @@ const parseMaterialUrls = (raw) => {
   return [text]
 }
 
-const openFileInNewTab = (url) => {
-  const text = String(url || '').trim()
-  if (!text) return
-  window.open(text, '_blank')
+const openMaterialPreview = (rawUrl) => {
+  router.push({
+    name: 'SalesMaterialPreview',
+    query: { url: String(rawUrl || ''), from: router.currentRoute.value.fullPath }
+  })
 }
 
 const issueMaterialUrls = ref([])
@@ -316,30 +356,36 @@ const getList = () => {
   })
 }
 
-const handleCreate = () => {
+const handleCreate = async (prefillBatteryId) => {
+  const prefill = (typeof prefillBatteryId === 'string' || typeof prefillBatteryId === 'number')
+    ? String(prefillBatteryId).trim()
+    : ''
   dialogMode.value = 'create'
   temp.recordId = undefined
   temp.batteryId = ''
   temp.faultType = ''
   temp.description = ''
-  temp.maintainer = ''
+  temp.maintainer = userStore.name || ''
   temp.issueMaterialDesc = ''
   temp.issueMaterialUrl = ''
   issueMaterialUrls.value = []
   syncIssueMaterialFileList()
+  await loadMaintainableBatteries()
+  if (prefill) temp.batteryId = prefill
   dialogFormVisible.value = true
 }
 
-const handleRedo = (row) => {
+const handleRedo = async (row) => {
   dialogMode.value = 'edit'
   temp.recordId = row?.recordId
   temp.batteryId = row?.batteryId || ''
   temp.faultType = row?.faultType || ''
   temp.description = row?.description || ''
-  temp.maintainer = row?.maintainer || ''
+  temp.maintainer = row?.maintainer || userStore.name || ''
   temp.issueMaterialDesc = row?.issueMaterialDesc || ''
   issueMaterialUrls.value = parseMaterialUrls(row?.issueMaterialUrl)
   syncIssueMaterialFileList()
+  await loadMaintainableBatteries()
   dialogFormVisible.value = true
 }
 
@@ -405,6 +451,18 @@ const submitComplete = () => {
 }
 
 onMounted(() => {
+  const batteryId = route.query?.batteryId
+  if (batteryId != null && String(batteryId).trim()) {
+    listQuery.batteryId = String(batteryId).trim()
+  }
   getList()
+
+  const action = String(route.query?.action || '').trim().toLowerCase()
+  const openCreate = route.query?.openCreate
+  const create = route.query?.create
+  const shouldOpenCreate = action === 'create' || openCreate === '1' || create === '1'
+  if (shouldOpenCreate) {
+    handleCreate(batteryId)
+  }
 })
 </script>

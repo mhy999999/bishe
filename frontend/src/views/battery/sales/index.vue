@@ -1,6 +1,8 @@
 <template>
   <div class="app-container">
     <div class="filter-container">
+      <el-input v-model="listQuery.batteryId" placeholder="电池ID" clearable class="filter-item"
+        style="width: 200px; margin-right: 10px;" @keyup.enter="handleFilter" />
       <el-select v-model="listQuery.status" placeholder="审核状态" clearable class="filter-item"
         style="width: 150px; margin-right: 10px;">
         <el-option label="待审核" :value="0" />
@@ -60,7 +62,10 @@
       </el-table-column>
       <el-table-column label="操作" align="center" width="200">
         <template #default="{ row }">
-          <template v-if="row.status === 2">
+          <template v-if="row.status === 1">
+            <el-button type="primary" size="small" @click="handleBinding(row)">车电绑定</el-button>
+          </template>
+          <template v-else-if="row.status === 2">
             <el-button type="primary" size="small" @click="handleResubmit(row)">重新提交</el-button>
             <el-button type="danger" size="small" @click="handleCancel(row)">取消订单</el-button>
           </template>
@@ -117,11 +122,12 @@ import { getSalesList, saveSales, updateSales, getBatteryList, uploadSalesMateri
 import Pagination from '@/components/Pagination/index.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/store/user'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 
 const dataForm = ref()
 const userStore = useUserStore()
 const router = useRouter()
+const route = useRoute()
 
 const list = ref([])
 const total = ref(0)
@@ -129,6 +135,7 @@ const listLoading = ref(true)
 const listQuery = reactive({
   pageNum: 1,
   pageSize: 10,
+  batteryId: undefined,
   status: undefined
 })
 
@@ -284,7 +291,10 @@ const getList = () => {
   })
 }
 
-const handleCreate = async () => {
+const handleCreate = async (prefillBatteryId) => {
+  const prefill = (typeof prefillBatteryId === 'string' || typeof prefillBatteryId === 'number')
+    ? String(prefillBatteryId).trim()
+    : ''
   dialogMode.value = 'create'
   temp.salesId = undefined
   temp.batteryId = ''
@@ -296,6 +306,7 @@ const handleCreate = async () => {
   materialUrls.value = []
   syncMaterialFileList()
   await loadSellableBatteries()
+  if (prefill) temp.batteryId = prefill
   dialogFormVisible.value = true
 }
 
@@ -330,6 +341,27 @@ const handleCancel = (row) => {
   }).catch(() => { })
 }
 
+const handleBinding = (row) => {
+  const batteryId = row?.batteryId
+  if (!batteryId) return
+  router.push({ name: 'VehicleBinding', query: { batteryId: String(batteryId), action: 'create' } })
+}
+
+const initFromRoute = async () => {
+  const batteryId = route.query?.batteryId
+  if (batteryId != null && String(batteryId).trim()) {
+    listQuery.batteryId = String(batteryId).trim()
+  }
+
+  const action = String(route.query?.action || '').trim().toLowerCase()
+  const openCreate = route.query?.openCreate
+  const create = route.query?.create
+  const shouldOpenCreate = action === 'create' || openCreate === '1' || create === '1'
+  if (shouldOpenCreate) {
+    await handleCreate(batteryId)
+  }
+}
+
 const submitData = () => {
   if (!dataForm.value) {
     return
@@ -353,7 +385,8 @@ const submitData = () => {
   })
 }
 
-onMounted(() => {
+onMounted(async () => {
+  await initFromRoute()
   getList()
 })
 </script>

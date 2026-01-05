@@ -22,6 +22,8 @@ public class MaintenanceRecord {
     private String txHash;
     private Integer status;
     private String auditOpinion;
+    private String auditor;
+    private LocalDateTime auditTime;
     private String issueMaterialDesc;
     private String issueMaterialUrl;
     private String completionMaterialDesc;

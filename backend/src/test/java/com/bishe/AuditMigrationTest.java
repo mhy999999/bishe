@@ -1,12 +1,14 @@
 package com.bishe;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Assertions;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.bishe.service.ISalesRecordService;
+import com.bishe.service.ISysAuditService;
 
 @SpringBootTest
 public class AuditMigrationTest {
@@ -15,6 +17,8 @@ public class AuditMigrationTest {
     private JdbcTemplate jdbcTemplate;
     @Autowired
     private ISalesRecordService salesRecordService;
+    @Autowired
+    private ISysAuditService sysAuditService;
 
     @Test
     public void createAuditTables() {
@@ -89,6 +93,14 @@ public class AuditMigrationTest {
         } catch (Exception ignored) {
         }
         try {
+            jdbcTemplate.execute("ALTER TABLE maintenance_record ADD COLUMN auditor VARCHAR(50) COMMENT '审核人'");
+        } catch (Exception ignored) {
+        }
+        try {
+            jdbcTemplate.execute("ALTER TABLE maintenance_record ADD COLUMN audit_time DATETIME COMMENT '审核时间'");
+        } catch (Exception ignored) {
+        }
+        try {
             jdbcTemplate.execute("ALTER TABLE maintenance_record ADD COLUMN issue_material_desc VARCHAR(500) COMMENT '故障材料说明'");
         } catch (Exception ignored) {
         }
@@ -108,5 +120,43 @@ public class AuditMigrationTest {
             jdbcTemplate.execute("ALTER TABLE maintenance_record ADD COLUMN complete_time DATETIME");
         } catch (Exception ignored) {
         }
+    }
+
+    @Test
+    public void maintenanceAuditShouldSyncAuditorFields() {
+        String batteryId = "TEST-MAINT-" + System.currentTimeMillis();
+        jdbcTemplate.update(
+                "INSERT INTO maintenance_record (battery_id, station_id, fault_type, description, maintainer, create_time, status, issue_material_desc, issue_material_url) " +
+                        "VALUES (?, 1, 'TEST', 'TEST', 'tester', NOW(), 0, 'TEST', '[]')",
+                batteryId
+        );
+        Long recordId = jdbcTemplate.queryForObject(
+                "SELECT record_id FROM maintenance_record WHERE battery_id = ? ORDER BY record_id DESC LIMIT 1",
+                Long.class,
+                batteryId
+        );
+        Assertions.assertNotNull(recordId);
+
+        jdbcTemplate.update(
+                "INSERT INTO sys_audit (business_type, business_id, apply_user, apply_time, status) VALUES ('MAINTENANCE', ?, 'tester', NOW(), 0)",
+                recordId.toString()
+        );
+        Long auditId = jdbcTemplate.queryForObject(
+                "SELECT audit_id FROM sys_audit WHERE business_type='MAINTENANCE' AND business_id=? ORDER BY audit_id DESC LIMIT 1",
+                Long.class,
+                recordId.toString()
+        );
+        Assertions.assertNotNull(auditId);
+
+        sysAuditService.doAudit(auditId, 1, "ok", "auditor1");
+
+        java.util.Map<String, Object> row = jdbcTemplate.queryForMap(
+                "SELECT status, audit_opinion, auditor, audit_time FROM maintenance_record WHERE record_id=?",
+                recordId
+        );
+        Assertions.assertEquals(1, ((Number) row.get("status")).intValue());
+        Assertions.assertEquals("ok", row.get("audit_opinion"));
+        Assertions.assertEquals("auditor1", row.get("auditor"));
+        Assertions.assertNotNull(row.get("audit_time"));
     }
 }

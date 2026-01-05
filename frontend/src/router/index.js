@@ -66,7 +66,7 @@ export const asyncRoutes = [
     component: Layout,
     redirect: '/battery/info',
     name: 'Battery',
-    meta: { title: '电池管理', icon: 'Box', roles: ['admin', 'manufacturer'] },
+    meta: { title: '电池管理', icon: 'Box', roles: ['admin', 'manufacturer', 'maintainer', 'maintenance', 'sales', 'dealer'] },
     children: [
       {
         path: 'info',
@@ -112,7 +112,7 @@ export const asyncRoutes = [
         name: 'BatteryMaintenance',
         component: ParentView,
         redirect: '/battery/maintenance/list',
-        meta: { title: '电池维修', icon: 'Tools', roles: ['admin', 'maintainer'] },
+        meta: { title: '电池维修', icon: 'Tools', roles: ['admin', 'maintainer', 'maintenance'] },
         children: [
           {
             path: 'list',
