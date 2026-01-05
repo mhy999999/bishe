@@ -100,7 +100,7 @@
       <template #footer>
         <div class="dialog-footer">
           <el-button @click="auditDialogVisible = false">取消</el-button>
-          <el-button type="primary" :loading="auditSubmitting" @click="submitAudit">提交</el-button>
+          <el-button type="primary" :loading="auditSubmitting" :disabled="auditSubmitting" @click="submitAudit">提交</el-button>
         </div>
       </template>
     </el-dialog>
@@ -131,8 +131,10 @@
             </div>
           </template>
 
-          <el-image v-if="photoPreviewUrls.length > 0" style="width: 100%; max-width: 680px;" :src="photoPreviewUrls[0]"
-            :preview-src-list="photoPreviewUrls" :initial-index="0" fit="contain" />
+          <div v-if="photoPreviewUrls.length > 0" class="recycling-photo-grid">
+            <el-image v-for="(u, idx) in photoPreviewUrls" :key="u + '_' + idx" class="recycling-photo-item" :src="u"
+              :preview-src-list="photoPreviewUrls" :initial-index="idx" fit="cover" />
+          </div>
           <el-empty v-else description="暂无照片" />
         </el-card>
 
@@ -159,9 +161,14 @@
           <template #header>
             <div style="display:flex; align-items:center; justify-content:space-between;">
               <span>估值与确认</span>
-              <el-button type="primary" size="small" :loading="valuationCalculating" @click="calcValuation">
-                计算估值
-              </el-button>
+              <div>
+                <el-button v-if="canAudit" type="warning" size="small" :loading="aiTraining" @click="trainAiValuation">
+                  AI微调训练
+                </el-button>
+                <el-button type="primary" size="small" :loading="valuationCalculating" @click="calcValuation">
+                  AI计算估值
+                </el-button>
+              </div>
             </div>
           </template>
 
@@ -284,7 +291,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import Pagination from '@/components/Pagination/index.vue'
 import { useUserStore } from '@/store/user'
-import { applyRecycling, auditRecycling, calcRecyclingValuation, confirmRecyclingPrice, getRecyclingList, getRecyclingReceipt, uploadRecyclingPhoto, uploadRecyclingReport } from '@/api/trace'
+import { applyRecycling, auditRecycling, calcRecyclingValuation, confirmRecyclingPrice, getRecyclingList, getRecyclingReceipt, trainRecyclingValuationAi, uploadRecyclingPhoto, uploadRecyclingReport } from '@/api/trace'
 
 const route = useRoute()
 const router = useRouter()
@@ -422,6 +429,7 @@ const openAuditDialog = (row) => {
 
 const submitAudit = () => {
   if (!auditForm.appraisalId) return
+  if (auditSubmitting.value) return
   auditSubmitting.value = true
   auditRecycling({
     appraisalId: auditForm.appraisalId,
@@ -447,6 +455,7 @@ const openDetail = (row) => {
 
 const valuationDialogVisible = ref(false)
 const valuationCalculating = ref(false)
+const aiTraining = ref(false)
 const confirmSubmitting = ref(false)
 const confirmForm = reactive({
   finalValue: ''
@@ -509,7 +518,8 @@ const handlePhotoUpload = (options) => {
   const formData = new FormData()
   formData.append('appraisalId', String(activeRow.value.appraisalId))
   formData.append('file', options.file)
-  uploadRecyclingPhoto(formData).then((url) => {
+  uploadRecyclingPhoto(formData).then((res) => {
+    const url = res?.data || res
     const urls = parseStringList(activeRow.value.photoUrls)
     urls.push(String(url || ''))
     activeRow.value.photoUrls = JSON.stringify(urls.filter(Boolean))
@@ -529,7 +539,8 @@ const handleReportUpload = (options) => {
   const formData = new FormData()
   formData.append('appraisalId', String(activeRow.value.appraisalId))
   formData.append('file', options.file)
-  uploadRecyclingReport(formData).then((url) => {
+  uploadRecyclingReport(formData).then((res) => {
+    const url = res?.data || res
     activeRow.value.performanceReportUrl = String(url || '')
     ElMessage.success('上传成功')
     options.onSuccess && options.onSuccess(url)
@@ -542,14 +553,32 @@ const handleReportUpload = (options) => {
 const calcValuation = () => {
   if (!activeRow.value?.appraisalId) return
   valuationCalculating.value = true
-  calcRecyclingValuation({ appraisalId: activeRow.value.appraisalId }).then((updated) => {
+  calcRecyclingValuation({ appraisalId: activeRow.value.appraisalId }).then((res) => {
+    const updated = res?.data || res
     activeRow.value = { ...activeRow.value, ...(updated || {}) }
+    if (updated?.finalValue != null) {
+      confirmForm.finalValue = String(updated.finalValue)
+    }
     ElMessage.success('估值已计算')
     getList()
   }).catch((err) => {
     console.error(err)
   }).finally(() => {
     valuationCalculating.value = false
+  })
+}
+
+const trainAiValuation = () => {
+  if (aiTraining.value) return
+  aiTraining.value = true
+  trainRecyclingValuationAi({ ntrees: 300, maxDepth: 18, nodeSize: 5, subsample: 1.0 }).then((res) => {
+    const info = res?.data || res
+    const samples = info?.samples ?? '-'
+    ElMessage.success(`AI训练完成，样本数：${samples}`)
+  }).catch((err) => {
+    console.error(err)
+  }).finally(() => {
+    aiTraining.value = false
   })
 }
 
@@ -630,3 +659,19 @@ watch(
   }
 )
 </script>
+
+<style scoped>
+.recycling-photo-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.recycling-photo-item {
+  width: 150px;
+  height: 100px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid #ebeef5;
+}
+</style>

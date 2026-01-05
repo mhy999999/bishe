@@ -3,13 +3,10 @@
     <el-tabs v-model="activeTab">
       <el-tab-pane label="按电池ID溯源" name="battery">
         <div class="filter-container">
-          <el-input v-model="batteryQuery.batteryIdInput" placeholder="输入电池ID" style="width: 220px;" class="filter-item"
+          <el-autocomplete v-model="batteryQuery.batteryIdInput" placeholder="输入/选择电池ID" style="width: 320px;"
+            class="filter-item" :fetch-suggestions="querySearchBatteryId" clearable :trigger-on-focus="true"
+            :highlight-first-item="true" :debounce="200" @select="handleBatterySelect"
             @keyup.enter="handleBatteryFilter" />
-          <el-select v-model="batteryQuery.batteryId" clearable filterable placeholder="选择电池ID"
-            style="width: 220px; margin-left: 10px;" class="filter-item" @change="handleBatteryFilter">
-            <el-option v-for="item in batteryOptions" :key="item.batteryId" :label="item.batteryId"
-              :value="item.batteryId" />
-          </el-select>
           <el-button class="filter-item" type="primary" icon="Search" @click="handleBatteryFilter">
             查询溯源
           </el-button>
@@ -36,6 +33,16 @@
             </template>
           </el-table-column>
         </el-table>
+
+        <el-card v-if="traceEvents.length" shadow="never" style="margin-top: 12px;">
+          <template #header>
+            <div style="display:flex; align-items:center; justify-content:space-between;">
+              <span>生命周期图</span>
+              <span style="color:#909399; font-size:12px;">可拖拽/缩放，点击节点查看TxHash</span>
+            </div>
+          </template>
+          <div ref="batteryChartRef" class="trace-chart" />
+        </el-card>
       </el-tab-pane>
 
       <el-tab-pane label="按交易查询" name="tx">
@@ -51,7 +58,9 @@
           <el-table-column label="交易哈希" prop="txHash" align="center" width="220">
             <template #default="{ row }">
               <el-tooltip :content="row.txHash" placement="top">
-                <span class="link-type">{{ row.txHash?.substring(0, 18) }}...</span>
+                <el-link type="primary" :underline="false" @click="openTxHash(row.txHash)">
+                  {{ row.txHash?.substring(0, 18) }}...
+                </el-link>
               </el-tooltip>
             </template>
           </el-table-column>
@@ -113,6 +122,19 @@
           </el-table-column>
         </el-table>
 
+        <el-card v-if="chainQuery.txHash || txTraceLoading || txChartEvents.length" shadow="never" style="margin-top: 12px;">
+          <template #header>
+            <div style="display:flex; align-items:center; justify-content:space-between;">
+              <span>关联电池生命周期图</span>
+              <span style="color:#909399; font-size:12px;">电池ID：{{ txBatteryId || '-' }}</span>
+            </div>
+          </template>
+          <div v-if="!txTraceLoading && !txChartEvents.length" style="padding: 18px 0;">
+            <el-empty description="暂无可展示的图表数据" />
+          </div>
+          <div v-else v-loading="txTraceLoading" ref="txChartRef" class="trace-chart" />
+        </el-card>
+
         <pagination v-show="chainTotal > 0" :total="chainTotal" v-model:page="chainQuery.pageNum"
           v-model:limit="chainQuery.pageSize" @pagination="getChainTxList" />
       </el-tab-pane>
@@ -121,13 +143,14 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, watch } from 'vue'
+import { ref, reactive, onMounted, watch, nextTick, onBeforeUnmount, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getBatteryList } from '@/api/battery'
 import { getChainList, getMaintenanceList, getRecyclingList, getSalesList, getTransferList } from '@/api/trace'
 import Pagination from '@/components/Pagination/index.vue'
 import { ElMessage } from 'element-plus'
 import { InfoFilled } from '@element-plus/icons-vue'
+import * as echarts from 'echarts'
 
 const route = useRoute()
 const router = useRouter()
@@ -136,7 +159,7 @@ const activeTab = ref('battery')
 
 const chainList = ref([])
 const chainTotal = ref(0)
-const chainLoading = ref(true)
+const chainLoading = ref(false)
 const chainQuery = reactive({
   pageNum: 1,
   pageSize: 10,
@@ -145,18 +168,34 @@ const chainQuery = reactive({
 
 const batteryOptions = ref([])
 const batteryQuery = reactive({
-  batteryId: undefined,
   batteryIdInput: ''
 })
 const traceEvents = ref([])
 const traceLoading = ref(false)
 
+const txBatteryId = ref('')
+const txTraceEvents = ref([])
+const txTraceLoading = ref(false)
+
+const batteryChartRef = ref(null)
+const txChartRef = ref(null)
+let batteryChart = null
+let txChart = null
+
 const resolveBatteryId = () => {
   const fromInput = String(batteryQuery.batteryIdInput || '').trim()
-  if (fromInput) return fromInput
-  const fromSelect = batteryQuery.batteryId
-  const value = String(fromSelect || '').trim()
-  return value || undefined
+  return fromInput || undefined
+}
+
+const querySearchBatteryId = (queryString, cb) => {
+  const q = String(queryString || '').trim().toLowerCase()
+  const unique = Array.from(new Set((batteryOptions.value || []).map(r => String(r?.batteryId || '').trim()).filter(Boolean)))
+  const matched = q ? unique.filter(v => v.toLowerCase().includes(q)) : unique
+  cb(matched.slice(0, 20).map(v => ({ value: v })))
+}
+
+const handleBatterySelect = () => {
+  handleBatteryFilter()
 }
 
 const loadBatteryOptions = () => {
@@ -182,10 +221,18 @@ const getChainTxList = () => {
       chainList.value = []
       chainTotal.value = 0
     }
+    if (chainQuery.txHash) {
+      syncTxTraceFromChainList()
+    } else {
+      txBatteryId.value = ''
+      txTraceEvents.value = []
+    }
     chainLoading.value = false
   }).catch(() => {
     chainList.value = []
     chainTotal.value = 0
+    txBatteryId.value = ''
+    txTraceEvents.value = []
     chainLoading.value = false
   })
 }
@@ -197,6 +244,11 @@ const handleTxFilter = () => {
   else delete query.txHash
   delete query.batteryId
   router.replace({ name: route.name, query })
+
+  if (!chainQuery.txHash) {
+    txBatteryId.value = ''
+    txTraceEvents.value = []
+  }
 }
 
 const formatJson = (jsonStr) => {
@@ -352,6 +404,229 @@ const sortByTimeAsc = (a, b) => {
   return t1 - t2
 }
 
+const getEventColor = (typeText) => {
+  const map = {
+    '流转': '#409eff',
+    '销售': '#67c23a',
+    '维修': '#e6a23c',
+    '回收': '#f56c6c'
+  }
+  return map[typeText] || '#909399'
+}
+
+const getEventSymbol = (typeText) => {
+  const map = {
+    '流转': 'roundRect',
+    '销售': 'circle',
+    '维修': 'diamond',
+    '回收': 'triangle'
+  }
+  return map[typeText] || 'circle'
+}
+
+const getTimeShort = (timeText) => {
+  const text = String(timeText || '').trim()
+  if (!text) return ''
+  const parts = text.split(' ')
+  return parts.length >= 2 ? parts[1] : text
+}
+
+const buildLifecycleChartOption = (events) => {
+  const list = (events || []).slice().sort(sortByTimeAsc)
+  const gapX = 220
+  const gapY = 90
+  const groupMap = new Map()
+
+  list.forEach((e, idx) => {
+    const key = e?.time ? Math.floor(e.time.getTime() / 1000) * 1000 : idx
+    const arr = groupMap.get(key) || []
+    arr.push(e)
+    groupMap.set(key, arr)
+  })
+
+  const groups = Array.from(groupMap.entries()).sort((a, b) => a[0] - b[0])
+  const nodes = []
+  const orderedIds = []
+  let nodeSeq = 0
+
+  groups.forEach(([, arr], groupIndex) => {
+    const x = groupIndex * gapX
+    const n = arr.length
+    arr.forEach((e, j) => {
+      const title = e?.typeText || ''
+      const timeText = e?.timeText || ''
+      const timeShort = getTimeShort(timeText)
+      const y = (j - (n - 1) / 2) * gapY
+      const id = String(nodeSeq++)
+      orderedIds.push(id)
+      nodes.push({
+        id,
+        name: title,
+        x,
+        y,
+        value: {
+          ...e,
+          title,
+          time: timeText
+        },
+        symbol: getEventSymbol(title),
+        symbolSize: 52,
+        itemStyle: {
+          color: getEventColor(title),
+          borderColor: '#ffffff',
+          borderWidth: 2
+        },
+        label: {
+          show: true,
+          position: 'bottom',
+          distance: 10,
+          formatter: timeShort ? `{t|${title}}\n{m|${timeShort}}` : `{t|${title}}`,
+          backgroundColor: '#ffffff',
+          borderColor: '#ebeef5',
+          borderWidth: 1,
+          borderRadius: 6,
+          padding: [6, 8],
+          rich: {
+            t: {
+              color: '#303133',
+              fontSize: 12,
+              fontWeight: 600,
+              lineHeight: 16,
+              align: 'center'
+            },
+            m: {
+              color: '#909399',
+              fontSize: 11,
+              lineHeight: 14,
+              align: 'center'
+            }
+          }
+        }
+      })
+    })
+  })
+
+  const links = orderedIds.slice(1).map((id, idx) => ({
+    source: orderedIds[idx],
+    target: id
+  }))
+
+  return {
+    tooltip: {
+      trigger: 'item',
+      formatter: (p) => {
+        const v = p?.data?.value || {}
+        const lines = []
+        if (v.title) lines.push(`<div style="font-weight:600; margin-bottom:6px;">${v.title}</div>`)
+        if (v.timeText) lines.push(`<div>时间：${v.timeText}</div>`)
+        if (v.content) lines.push(`<div style="margin-top:6px; white-space:pre-wrap;">${v.content}</div>`)
+        if (v.txHash) lines.push(`<div style="margin-top:6px; color:#909399;">TxHash：${v.txHash}</div>`)
+        return lines.join('') || '-'
+      }
+    },
+    grid: {
+      left: 10,
+      right: 10,
+      top: 10,
+      bottom: 10,
+      containLabel: true
+    },
+    series: [
+      {
+        type: 'graph',
+        layout: 'none',
+        data: nodes,
+        links,
+        roam: true,
+        scaleLimit: {
+          min: 0.5,
+          max: 3
+        },
+        edgeSymbol: ['none', 'arrow'],
+        edgeSymbolSize: 8,
+        lineStyle: {
+          color: '#dcdfe6',
+          width: 2,
+          curveness: 0.18
+        },
+        emphasis: {
+          focus: 'adjacency',
+          lineStyle: {
+            width: 3
+          }
+        }
+      }
+    ]
+  }
+}
+
+const ensureChart = (elRef, current) => {
+  const el = elRef.value
+  if (!el) return current
+  if (current && !current.isDisposed()) {
+    const dom = typeof current.getDom === 'function' ? current.getDom() : null
+    if (dom === el) return current
+    current.dispose()
+  }
+  const existing = echarts.getInstanceByDom(el)
+  return existing || echarts.init(el)
+}
+
+const renderBatteryChart = () => {
+  batteryChart = ensureChart(batteryChartRef, batteryChart)
+  if (!batteryChart) return
+  handleChartClick(batteryChart)
+  const ev = traceEvents.value || []
+  if (!ev.length) {
+    batteryChart.clear()
+    return
+  }
+  batteryChart.setOption(buildLifecycleChartOption(ev), true)
+  requestAnimationFrame(() => {
+    if (batteryChart && !batteryChart.isDisposed()) batteryChart.resize()
+  })
+}
+
+const renderTxChart = () => {
+  txChart = ensureChart(txChartRef, txChart)
+  if (!txChart) return
+  handleChartClick(txChart)
+  const ev = txChartEvents.value || []
+  if (!ev.length) {
+    txChart.clear()
+    return
+  }
+  txChart.setOption(buildLifecycleChartOption(ev), true)
+  requestAnimationFrame(() => {
+    if (txChart && !txChart.isDisposed()) txChart.resize()
+  })
+}
+
+const buildTxOnlyEvents = (rows) => {
+  const list = (rows || []).map(r => {
+    const time = parseToDate(r?.createTime)
+    const method = r?.methodName ? String(r.methodName) : '交易'
+    const statusText = r?.status === 1 ? '成功' : (r?.status === 0 ? '失败' : String(r?.status ?? '-'))
+    const content = `方法：${method}，状态：${statusText}，参数：${getParamsSummary(r)}`
+    return {
+      time,
+      timeText: time ? formatDateTime(time) : String(r?.createTime || ''),
+      typeText: '交易',
+      typeTag: 'info',
+      content,
+      txHash: r?.txHash || ''
+    }
+  })
+  list.sort(sortByTimeAsc)
+  return list
+}
+
+const txChartEvents = computed(() => {
+  if (txTraceEvents.value?.length) return txTraceEvents.value
+  if (chainQuery.txHash && chainList.value?.length) return buildTxOnlyEvents(chainList.value)
+  return []
+})
+
 const buildTraceEvents = ({ transfers, sales, maintenance, recycling }) => {
   const events = []
 
@@ -413,6 +688,36 @@ const buildTraceEvents = ({ transfers, sales, maintenance, recycling }) => {
   return events
 }
 
+const fetchTraceEventsByBatteryId = (batteryId) => {
+  const id = String(batteryId || '').trim()
+  if (!id) {
+    return Promise.resolve()
+  }
+  return Promise.allSettled([
+    getTransferList({ pageNum: 1, pageSize: 1000, batteryId: id }),
+    getSalesList({ pageNum: 1, pageSize: 1000, batteryId: id }),
+    getMaintenanceList({ pageNum: 1, pageSize: 1000, batteryId: id }),
+    getRecyclingList({ pageNum: 1, pageSize: 1000, batteryId: id })
+  ]).then(([tRes, sRes, mRes, rRes]) => {
+    const tOk = tRes?.status === 'fulfilled' ? tRes.value : null
+    const sOk = sRes?.status === 'fulfilled' ? sRes.value : null
+    const mOk = mRes?.status === 'fulfilled' ? mRes.value : null
+    const rOk = rRes?.status === 'fulfilled' ? rRes.value : null
+
+    const tPage = tOk?.data || tOk
+    const sPage = sOk?.data || sOk
+    const mPage = mOk?.data || mOk
+    const rPage = rOk?.data || rOk
+
+    return buildTraceEvents({
+      transfers: tPage?.records || [],
+      sales: sPage?.records || [],
+      maintenance: mPage?.records || [],
+      recycling: rPage?.records || []
+    })
+  }).catch(() => [])
+}
+
 const fetchTraceByBatteryId = (batteryId) => {
   const id = String(batteryId || '').trim()
   if (!id) {
@@ -420,45 +725,75 @@ const fetchTraceByBatteryId = (batteryId) => {
     return Promise.resolve()
   }
   traceLoading.value = true
-  return Promise.all([
-    getTransferList({ pageNum: 1, pageSize: 1000, batteryId: id }),
-    getSalesList({ pageNum: 1, pageSize: 1000, batteryId: id }),
-    getMaintenanceList({ pageNum: 1, pageSize: 1000, batteryId: id }),
-    getRecyclingList({ pageNum: 1, pageSize: 1000, batteryId: id })
-  ]).then(([tRes, sRes, mRes, rRes]) => {
-    const tPage = tRes?.data || tRes
-    const sPage = sRes?.data || sRes
-    const mPage = mRes?.data || mRes
-    const rPage = rRes?.data || rRes
-    traceEvents.value = buildTraceEvents({
-      transfers: tPage?.records || [],
-      sales: sPage?.records || [],
-      maintenance: mPage?.records || [],
-      recycling: rPage?.records || []
-    })
-    traceLoading.value = false
-  }).catch(() => {
-    traceEvents.value = []
+  return fetchTraceEventsByBatteryId(id).then(events => {
+    traceEvents.value = events || []
+  }).finally(() => {
     traceLoading.value = false
   })
 }
 
+const extractBatteryIdFromChainRow = (row) => {
+  const root = parseJson(row?.params)
+  const stack = [{ value: root, depth: 0 }]
+  const visited = new WeakSet()
+
+  const normalize = (v) => {
+    if (v == null) return undefined
+    const s = String(v).trim()
+    return s ? s : undefined
+  }
+
+  const acceptId = (key, v) => {
+    const s = normalize(v)
+    if (!s) return undefined
+    if (key === 'batteryId' || key === 'battery_id') return s
+    if (key === 'id' && /^BAT/i.test(s)) return s
+    return undefined
+  }
+
+  while (stack.length) {
+    const { value, depth } = stack.shift()
+    if (!value || typeof value !== 'object') continue
+    if (depth > 6) continue
+    if (visited.has(value)) continue
+    visited.add(value)
+
+    if (!Array.isArray(value)) {
+      const direct = acceptId('batteryId', value.batteryId) || acceptId('battery_id', value.battery_id) || acceptId('id', value.id)
+      if (direct) return direct
+    }
+
+    if (Array.isArray(value)) {
+      value.forEach(v => stack.push({ value: v, depth: depth + 1 }))
+    } else {
+      Object.keys(value).forEach(k => stack.push({ value: value[k], depth: depth + 1 }))
+    }
+  }
+
+  return undefined
+}
+
 const handleBatteryFilter = () => {
-  const id = resolveBatteryId()
   const input = String(batteryQuery.batteryIdInput || '').trim()
-  if (input && batteryQuery.batteryId && String(batteryQuery.batteryId) !== input) {
-    batteryQuery.batteryId = undefined
-  }
-  if (batteryQuery.batteryId) {
-    batteryQuery.batteryIdInput = String(batteryQuery.batteryId || '')
+  const id = input || undefined
+  activeTab.value = 'battery'
+
+  if (id) {
+    fetchTraceByBatteryId(id)
   } else {
-    batteryQuery.batteryIdInput = id || ''
+    traceEvents.value = []
   }
+
   const query = { ...route.query }
   if (id) query.batteryId = id
   else delete query.batteryId
   delete query.txHash
-  router.replace({ name: route.name, query })
+
+  const currentBatteryId = route.query?.batteryId
+  const needReplace = String(currentBatteryId || '') !== String(query.batteryId || '') || route.query?.txHash != null
+  if (needReplace) {
+    router.replace({ name: route.name, query })
+  }
 }
 
 const openTxHash = (txHash) => {
@@ -468,30 +803,135 @@ const openTxHash = (txHash) => {
   router.push({ name: route.name, query: { txHash: hash } })
 }
 
-onMounted(() => {
+const syncTxTraceFromChainList = () => {
+  if (!chainQuery.txHash) {
+    txBatteryId.value = ''
+    txTraceEvents.value = []
+    return Promise.resolve()
+  }
+  const row = (chainList.value || []).find(r => String(r?.txHash || '') === String(chainQuery.txHash || '')) || chainList.value?.[0]
+  const batteryId = extractBatteryIdFromChainRow(row)
+  txBatteryId.value = batteryId || ''
+  if (!batteryId) {
+    txTraceEvents.value = []
+    return Promise.resolve()
+  }
+  txTraceLoading.value = true
+  return fetchTraceEventsByBatteryId(batteryId).then(events => {
+    txTraceEvents.value = events || []
+  }).finally(() => {
+    txTraceLoading.value = false
+  })
+}
+
+onMounted(async () => {
   if (route.query?.batteryId) {
     activeTab.value = 'battery'
-    batteryQuery.batteryId = undefined
     batteryQuery.batteryIdInput = String(route.query.batteryId || '')
   } else if (route.query?.txHash) {
     activeTab.value = 'tx'
     chainQuery.txHash = route.query.txHash
   }
-  loadBatteryOptions()
+  await loadBatteryOptions()
   if (activeTab.value === 'tx') {
     getChainTxList()
   } else {
     const id = resolveBatteryId()
-    if (id) fetchTraceByBatteryId(id)
+    if (id) {
+      fetchTraceByBatteryId(id)
+    } else {
+      const first = String(batteryOptions.value?.[0]?.batteryId || '').trim()
+      if (first) {
+        batteryQuery.batteryIdInput = first
+        fetchTraceByBatteryId(first)
+      }
+    }
   }
 })
 
 watch(
+  () => traceEvents.value,
+  async () => {
+    await nextTick()
+    if (!traceEvents.value?.length) return
+    renderBatteryChart()
+  },
+  { deep: true }
+)
+
+watch(
+  () => txChartEvents.value,
+  async () => {
+    await nextTick()
+    renderTxChart()
+  },
+  { deep: true }
+)
+
+watch(
+  () => activeTab.value,
+  async () => {
+    await nextTick()
+    if (batteryChart && !batteryChart.isDisposed()) batteryChart.resize()
+    if (txChart && !txChart.isDisposed()) txChart.resize()
+  }
+)
+
+const handleChartClick = (chart) => {
+  if (!chart) return
+  chart.off('click')
+  chart.on('click', (p) => {
+    if (p?.dataType !== 'node') return
+    const txHash = p?.data?.value?.txHash
+    if (txHash) openTxHash(txHash)
+  })
+}
+
+watch(
+  () => [batteryChartRef.value, txChartRef.value],
+  async ([batteryEl, txEl]) => {
+    await nextTick()
+    if (!batteryEl) {
+      if (batteryChart && !batteryChart.isDisposed()) batteryChart.dispose()
+      batteryChart = null
+    } else {
+      batteryChart = ensureChart(batteryChartRef, batteryChart)
+      handleChartClick(batteryChart)
+      if (traceEvents.value?.length) renderBatteryChart()
+    }
+    if (!txEl) {
+      if (txChart && !txChart.isDisposed()) txChart.dispose()
+      txChart = null
+    } else {
+      txChart = ensureChart(txChartRef, txChart)
+      handleChartClick(txChart)
+      if (txChartEvents.value?.length) renderTxChart()
+    }
+  }
+)
+
+onBeforeUnmount(() => {
+  if (batteryChart && !batteryChart.isDisposed()) batteryChart.dispose()
+  if (txChart && !txChart.isDisposed()) txChart.dispose()
+  batteryChart = null
+  txChart = null
+})
+
+watch(
+  () => activeTab.value,
+  (tab) => {
+    if (tab !== 'tx') return
+    if (!chainList.value.length && !chainQuery.txHash) {
+      getChainTxList()
+    }
+  }
+)
+
+watch(
   () => route.query?.txHash,
   (txHash) => {
-    if (!txHash) return
-    activeTab.value = 'tx'
-    chainQuery.txHash = txHash || undefined
+    if (activeTab.value !== 'tx') return
+    chainQuery.txHash = txHash ? String(txHash) : undefined
     chainQuery.pageNum = 1
     getChainTxList()
   }
@@ -501,14 +941,12 @@ watch(
   () => route.query?.batteryId,
   (batteryId) => {
     if (!batteryId) {
-      batteryQuery.batteryId = undefined
       batteryQuery.batteryIdInput = ''
       traceEvents.value = []
       return
     }
     activeTab.value = 'battery'
     batteryQuery.batteryIdInput = String(batteryId || '')
-    batteryQuery.batteryId = undefined
     fetchTraceByBatteryId(String(batteryId || ''))
   }
 )
@@ -550,5 +988,10 @@ watch(
   margin-left: 4px;
   color: #909399;
   vertical-align: -2px;
+}
+
+.trace-chart {
+  width: 100%;
+  height: 360px;
 }
 </style>

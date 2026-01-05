@@ -5,9 +5,7 @@
         style="width: 200px; margin-right: 10px;" @keyup.enter="handleFilter" />
       <el-select v-model="listQuery.status" placeholder="状态" clearable class="filter-item"
         style="width: 150px; margin-right: 10px;">
-        <el-option label="待审核" :value="0" />
-        <el-option label="已通过" :value="1" />
-        <el-option label="已驳回" :value="2" />
+        <el-option label="进行中" :value="1" />
         <el-option label="已完成" :value="3" />
       </el-select>
       <el-button class="filter-item" type="primary" icon="Search" @click="handleFilter">
@@ -29,21 +27,6 @@
         </template>
       </el-table-column>
       <el-table-column label="维修人" prop="maintainer" align="center" />
-      <el-table-column label="审核意见" align="center" min-width="180">
-        <template #default="{ row }">
-          <span>{{ row?.auditOpinion || '-' }}</span>
-        </template>
-      </el-table-column>
-      <el-table-column label="审核人" align="center" width="120">
-        <template #default="{ row }">
-          <span>{{ row?.auditor || '-' }}</span>
-        </template>
-      </el-table-column>
-      <el-table-column label="审核时间" align="center" width="180">
-        <template #default="{ row }">
-          <span>{{ row?.auditTime || '-' }}</span>
-        </template>
-      </el-table-column>
       <el-table-column label="故障材料" align="center" min-width="160">
         <template #default="{ row }">
           <template v-if="parseMaterialUrls(row?.issueMaterialUrl).length > 0">
@@ -75,13 +58,8 @@
       </el-table-column>
       <el-table-column label="操作" align="center" width="240" class-name="small-padding fixed-width">
         <template #default="{ row }">
-          <el-button v-if="row.status === 1" type="success" size="small" @click="handleComplete(row)">
-            提交完工
-          </el-button>
-          <template v-else-if="row.status === 2">
-            <el-button type="primary" size="small" @click="handleRedo(row)">
-              重新维修
-            </el-button>
+          <template v-if="row.status === 0 || row.status === 1">
+            <el-button type="success" size="small" @click="handleComplete(row)">提交完工</el-button>
           </template>
         </template>
       </el-table-column>
@@ -90,7 +68,7 @@
     <pagination v-show="total > 0" :total="total" v-model:page="listQuery.pageNum" v-model:limit="listQuery.pageSize"
       @pagination="getList" />
 
-    <el-dialog :title="dialogMode === 'edit' ? '重新维修' : '新增维修记录'" v-model="dialogFormVisible">
+    <el-dialog title="新增工单" v-model="dialogFormVisible">
       <el-form ref="dataForm" :model="temp" :rules="rules" label-width="100px">
         <el-form-item label="电池ID" prop="batteryId">
           <el-select v-model="temp.batteryId" filterable placeholder="请选择电池ID" :loading="batteryLoading"
@@ -128,6 +106,31 @@
 
     <el-dialog title="提交完工材料" v-model="dialogCompleteVisible">
       <el-form :model="completeTemp" label-width="100px">
+        <el-form-item label="电池ID" prop="batteryId">
+          <el-select v-model="completeTemp.batteryId" filterable placeholder="请选择电池ID" :loading="batteryLoading"
+            style="width: 100%;">
+            <el-option v-for="item in batteryOptions" :key="item.batteryId" :label="item.batteryId"
+              :value="item.batteryId" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="故障类型" prop="faultType">
+          <el-input v-model="completeTemp.faultType" />
+        </el-form-item>
+        <el-form-item label="维修内容" prop="description">
+          <el-input v-model="completeTemp.description" type="textarea" />
+        </el-form-item>
+        <el-form-item label="维修人">
+          <el-input v-model="completeTemp.maintainer" placeholder="默认使用当前账号" />
+        </el-form-item>
+        <el-form-item label="故障材料说明" prop="issueMaterialDesc">
+          <el-input v-model="completeTemp.issueMaterialDesc" type="textarea" />
+        </el-form-item>
+        <el-form-item label="故障材料文件">
+          <el-upload v-model:file-list="issueMaterialFileList" :http-request="handleIssueMaterialUpload"
+            :on-remove="handleIssueMaterialRemove" multiple :limit="5" :on-exceed="handleIssueMaterialExceed">
+            <el-button type="primary">上传文件</el-button>
+          </el-upload>
+        </el-form-item>
         <el-form-item label="解决方案">
           <el-input v-model="completeTemp.solution" type="textarea" />
         </el-form-item>
@@ -153,7 +156,7 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { getMaintenanceList, saveMaintenance, updateMaintenance, uploadMaintenanceMaterial, completeMaintenance, getBatteryList } from '@/api/battery'
+import { getMaintenanceList, saveMaintenance, uploadMaintenanceMaterial, completeMaintenance, getBatteryList } from '@/api/battery'
 import Pagination from '@/components/Pagination/index.vue'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/store/user'
@@ -175,16 +178,14 @@ const listQuery = reactive({
 })
 
 const statusMap = {
-  0: { text: '待审核', type: 'warning' },
-  1: { text: '已通过', type: 'success' },
-  2: { text: '已驳回', type: 'danger' },
+  0: { text: '待处理', type: 'warning' },
+  1: { text: '进行中', type: 'success' },
+  2: { text: '已取消', type: 'danger' },
   3: { text: '已完成', type: 'info' }
 }
 
 const dialogFormVisible = ref(false)
-const dialogMode = ref('create')
 const temp = reactive({
-  recordId: undefined,
   batteryId: '',
   faultType: '',
   description: '',
@@ -196,12 +197,17 @@ const temp = reactive({
 const batteryOptions = ref([])
 const batteryLoading = ref(false)
 
-const loadMaintainableBatteries = () => {
+const loadMaintainableBatteries = (currentBatteryId) => {
   batteryLoading.value = true
   return getBatteryList({ pageNum: 1, pageSize: 1000 }).then((response) => {
     const pageData = response?.data || response
     const records = pageData?.records || []
-    batteryOptions.value = records.filter(b => b && b.batteryId && b.status !== 2 && b.status !== 6)
+    const filtered = records.filter(b => b && b.batteryId && b.status !== 2 && b.status !== 6)
+    const cur = String(currentBatteryId || '').trim()
+    if (cur && !filtered.some(b => String(b.batteryId) === cur)) {
+      filtered.unshift({ batteryId: cur })
+    }
+    batteryOptions.value = filtered
     batteryLoading.value = false
   }).catch((err) => {
     console.error(err)
@@ -286,6 +292,12 @@ const handleIssueMaterialRemove = (uploadFile, uploadFiles) => {
 const dialogCompleteVisible = ref(false)
 const completeTemp = reactive({
   recordId: undefined,
+  batteryId: '',
+  faultType: '',
+  description: '',
+  maintainer: '',
+  issueMaterialDesc: '',
+  issueMaterialUrl: '',
   solution: '',
   completionMaterialDesc: '',
   completionMaterialUrl: ''
@@ -360,8 +372,6 @@ const handleCreate = async (prefillBatteryId) => {
   const prefill = (typeof prefillBatteryId === 'string' || typeof prefillBatteryId === 'number')
     ? String(prefillBatteryId).trim()
     : ''
-  dialogMode.value = 'create'
-  temp.recordId = undefined
   temp.batteryId = ''
   temp.faultType = ''
   temp.description = ''
@@ -370,22 +380,8 @@ const handleCreate = async (prefillBatteryId) => {
   temp.issueMaterialUrl = ''
   issueMaterialUrls.value = []
   syncIssueMaterialFileList()
-  await loadMaintainableBatteries()
+  await loadMaintainableBatteries(prefill)
   if (prefill) temp.batteryId = prefill
-  dialogFormVisible.value = true
-}
-
-const handleRedo = async (row) => {
-  dialogMode.value = 'edit'
-  temp.recordId = row?.recordId
-  temp.batteryId = row?.batteryId || ''
-  temp.faultType = row?.faultType || ''
-  temp.description = row?.description || ''
-  temp.maintainer = row?.maintainer || userStore.name || ''
-  temp.issueMaterialDesc = row?.issueMaterialDesc || ''
-  issueMaterialUrls.value = parseMaterialUrls(row?.issueMaterialUrl)
-  syncIssueMaterialFileList()
-  await loadMaintainableBatteries()
   dialogFormVisible.value = true
 }
 
@@ -402,10 +398,9 @@ const createData = () => {
       return
     }
     temp.issueMaterialUrl = JSON.stringify(issueMaterialUrls.value)
-    const action = dialogMode.value === 'edit' ? updateMaintenance : saveMaintenance
-    action(temp).then(() => {
+    saveMaintenance(temp).then(() => {
       dialogFormVisible.value = false
-      ElMessage.success(dialogMode.value === 'edit' ? '已重新提交维修审核' : '创建成功，已提交审核')
+      ElMessage.success('创建成功')
       getList()
     }).catch((err) => {
       console.error(err)
@@ -413,17 +408,51 @@ const createData = () => {
   })
 }
 
-const handleComplete = (row) => {
+const handleComplete = async (row) => {
   completeTemp.recordId = row?.recordId
+  completeTemp.batteryId = row?.batteryId || ''
+  completeTemp.faultType = row?.faultType || ''
+  completeTemp.description = row?.description || ''
+  completeTemp.maintainer = row?.maintainer || userStore.name || ''
+  completeTemp.issueMaterialDesc = row?.issueMaterialDesc || ''
+  issueMaterialUrls.value = parseMaterialUrls(row?.issueMaterialUrl)
+  syncIssueMaterialFileList()
+
   completeTemp.solution = ''
   completeTemp.completionMaterialDesc = ''
   completeTemp.completionMaterialUrl = ''
   completionMaterialUrls.value = []
   syncCompletionMaterialFileList()
+
+  await loadMaintainableBatteries(completeTemp.batteryId)
   dialogCompleteVisible.value = true
 }
 
 const submitComplete = () => {
+  const batteryId = String(completeTemp.batteryId || '').trim()
+  if (!batteryId) {
+    ElMessage.warning('电池ID不能为空')
+    return
+  }
+  const faultType = String(completeTemp.faultType || '').trim()
+  if (!faultType) {
+    ElMessage.warning('故障类型不能为空')
+    return
+  }
+  const description = String(completeTemp.description || '').trim()
+  if (!description) {
+    ElMessage.warning('维修内容不能为空')
+    return
+  }
+  const issueDesc = String(completeTemp.issueMaterialDesc || '').trim()
+  if (!issueDesc) {
+    ElMessage.warning('故障材料说明不能为空')
+    return
+  }
+  if (issueMaterialUrls.value.length <= 0) {
+    ElMessage.warning('请至少上传 1 个故障材料文件')
+    return
+  }
   const solution = String(completeTemp.solution || '').trim()
   if (!solution) {
     ElMessage.warning('解决方案不能为空')
@@ -438,6 +467,11 @@ const submitComplete = () => {
     ElMessage.warning('请至少上传 1 个完工材料文件')
     return
   }
+  completeTemp.batteryId = batteryId
+  completeTemp.faultType = faultType
+  completeTemp.description = description
+  completeTemp.issueMaterialDesc = issueDesc
+  completeTemp.issueMaterialUrl = JSON.stringify(issueMaterialUrls.value)
   completeTemp.solution = solution
   completeTemp.completionMaterialDesc = desc
   completeTemp.completionMaterialUrl = JSON.stringify(completionMaterialUrls.value)

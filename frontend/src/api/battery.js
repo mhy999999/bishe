@@ -106,14 +106,6 @@ export function updateMaintenance(data) {
   })
 }
 
-export function auditMaintenance(data) {
-  return request({
-    url: '/battery/maintenance/audit',
-    method: 'post',
-    data
-  })
-}
-
 // 销售管理
 export function getSalesList(params) {
   return request({

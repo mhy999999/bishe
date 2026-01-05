@@ -119,12 +119,6 @@ export const asyncRoutes = [
             name: 'MaintenanceRecordList',
             component: () => import('@/views/battery/maintenance/index.vue'),
             meta: { title: '维修记录', icon: 'List' }
-          },
-          {
-            path: 'audit',
-            name: 'MaintenanceAudit',
-            component: () => import('@/views/battery/maintenance/audit.vue'),
-            meta: { title: '维修审核', icon: 'Stamp' }
           }
         ]
       },
@@ -191,12 +185,6 @@ export const asyncRoutes = [
         name: 'MaintenanceRecord',
         component: () => import('@/views/maintenance/record/index.vue'),
         meta: { title: '售后工单', icon: 'Document', roles: ['admin', 'maintenance'] }
-      },
-      {
-        path: 'audit',
-        name: 'AfterSalesAudit',
-        component: () => import('@/views/battery/maintenance/audit.vue'),
-        meta: { title: '工单审核', icon: 'Stamp', roles: ['admin', 'maintenance'] }
       }
     ]
   },

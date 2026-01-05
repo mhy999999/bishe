@@ -410,45 +410,6 @@ public class BatteryBusinessController {
         return Result.success(maintenanceRecordService.page(page, wrapper));
     }
 
-    @PostMapping("/maintenance/audit")
-    public Result<Boolean> auditMaintenance(@RequestBody MaintenanceRecord auditData, HttpServletRequest request) {
-        Long userId = getCurrentUserId(request);
-        if (!hasAnyRole(userId, "admin", "maintainer", "maintenance")) {
-            return forbidden();
-        }
-        if (auditData == null || auditData.getRecordId() == null) {
-            return Result.error(400, "记录ID不能为空");
-        }
-        if (auditData.getStatus() == null || (auditData.getStatus() != 1 && auditData.getStatus() != 2)) {
-            return Result.error(400, "审核状态不合法");
-        }
-        String auditor = getCurrentUserDisplayName(request);
-        if (!StringUtils.hasText(auditor)) {
-            auditor = "system";
-        }
-        // 查找关联的待审核任务
-        LambdaQueryWrapper<SysAudit> query = new LambdaQueryWrapper<>();
-        query.eq(SysAudit::getBusinessType, "MAINTENANCE");
-        query.eq(SysAudit::getBusinessId, auditData.getRecordId().toString());
-        query.eq(SysAudit::getStatus, 0); // 待审核
-        query.orderByDesc(SysAudit::getApplyTime);
-        query.last("LIMIT 1");
-        SysAudit audit = sysAuditService.getOne(query);
-
-        if (audit != null) {
-            sysAuditService.doAudit(audit.getAuditId(), auditData.getStatus(), auditData.getAuditOpinion(), auditor);
-        } else {
-            MaintenanceRecord record = maintenanceRecordService.getById(auditData.getRecordId());
-            if (record == null) return Result.error("记录不存在");
-            record.setStatus(auditData.getStatus());
-            record.setAuditOpinion(auditData.getAuditOpinion());
-            record.setAuditor(auditor);
-            record.setAuditTime(java.time.LocalDateTime.now());
-            maintenanceRecordService.updateById(record);
-        }
-        return Result.success(true);
-    }
-
     @PostMapping("/maintenance")
     public Result<Boolean> saveMaintenance(@RequestBody MaintenanceRecord record, HttpServletRequest request) {
         Long userId = getCurrentUserId(request);
@@ -492,9 +453,9 @@ public class BatteryBusinessController {
         }
         LambdaQueryWrapper<MaintenanceRecord> pendingWrapper = new LambdaQueryWrapper<>();
         pendingWrapper.eq(MaintenanceRecord::getBatteryId, record.getBatteryId());
-        pendingWrapper.eq(MaintenanceRecord::getStatus, 0);
+        pendingWrapper.in(MaintenanceRecord::getStatus, 0, 1);
         if (maintenanceRecordService.count(pendingWrapper) > 0) {
-            return Result.error(400, "该电池已有待审核维修记录");
+            return Result.error(400, "该电池已有未完成工单");
         }
         if (!StringUtils.hasText(record.getMaintainer())) {
             record.setMaintainer(getCurrentUserDisplayName(request));
@@ -502,15 +463,9 @@ public class BatteryBusinessController {
         if (!StringUtils.hasText(record.getMaintainer())) {
             return Result.error(400, "维修人不能为空");
         }
-        record.setStatus(0);
-        record.setAuditOpinion(null);
-        record.setAuditor(null);
-        record.setAuditTime(null);
+        record.setStatus(1);
         if (record.getCreateTime() == null) record.setCreateTime(java.time.LocalDateTime.now());
         boolean success = maintenanceRecordService.save(record);
-        if (success) {
-            sysAuditService.submitAudit("MAINTENANCE", record.getRecordId().toString(), record.getMaintainer());
-        }
         return Result.success(success);
     }
 
@@ -527,8 +482,8 @@ public class BatteryBusinessController {
         if (existing == null) {
             return Result.error("记录不存在");
         }
-        if (existing.getStatus() != null && existing.getStatus() == 1 && !hasAnyRole(userId, "admin")) {
-            return Result.error(403, "已通过记录不允许修改");
+        if (existing.getStatus() != null && existing.getStatus() == 3 && !hasAnyRole(userId, "admin")) {
+            return Result.error(403, "已完成工单不允许修改");
         }
         String batteryIdToUse = StringUtils.hasText(record.getBatteryId()) ? record.getBatteryId() : existing.getBatteryId();
         if (!StringUtils.hasText(batteryIdToUse)) {
@@ -543,10 +498,10 @@ public class BatteryBusinessController {
         }
         LambdaQueryWrapper<MaintenanceRecord> pendingWrapper = new LambdaQueryWrapper<>();
         pendingWrapper.eq(MaintenanceRecord::getBatteryId, batteryIdToUse);
-        pendingWrapper.eq(MaintenanceRecord::getStatus, 0);
+        pendingWrapper.in(MaintenanceRecord::getStatus, 0, 1);
         pendingWrapper.ne(MaintenanceRecord::getRecordId, record.getRecordId());
         if (maintenanceRecordService.count(pendingWrapper) > 0) {
-            return Result.error(400, "该电池已有待审核维修记录");
+            return Result.error(400, "该电池已有未完成工单");
         }
         String maintainerToUse = StringUtils.hasText(record.getMaintainer()) ? record.getMaintainer() : existing.getMaintainer();
         if (!StringUtils.hasText(maintainerToUse)) {
@@ -568,10 +523,7 @@ public class BatteryBusinessController {
         com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<MaintenanceRecord> updateWrapper =
                 new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<>();
         updateWrapper.eq(MaintenanceRecord::getRecordId, record.getRecordId());
-        updateWrapper.set(MaintenanceRecord::getStatus, 0);
-        updateWrapper.set(MaintenanceRecord::getAuditOpinion, null);
-        updateWrapper.set(MaintenanceRecord::getAuditor, null);
-        updateWrapper.set(MaintenanceRecord::getAuditTime, null);
+        updateWrapper.set(MaintenanceRecord::getStatus, 1);
         updateWrapper.set(StringUtils.hasText(record.getBatteryId()), MaintenanceRecord::getBatteryId, record.getBatteryId());
         updateWrapper.set(record.getStationId() != null, MaintenanceRecord::getStationId, record.getStationId());
         updateWrapper.set(StringUtils.hasText(record.getFaultType()), MaintenanceRecord::getFaultType, record.getFaultType());
@@ -583,9 +535,6 @@ public class BatteryBusinessController {
         updateWrapper.set(MaintenanceRecord::getIssueMaterialDesc, issueMaterialDescToUse);
         updateWrapper.set(MaintenanceRecord::getIssueMaterialUrl, issueMaterialUrlToUse);
         boolean success = maintenanceRecordService.update(updateWrapper);
-        if (success) {
-            sysAuditService.submitAudit("MAINTENANCE", record.getRecordId().toString(), maintainerToUse);
-        }
         return Result.success(success);
     }
 
@@ -598,6 +547,66 @@ public class BatteryBusinessController {
         if (dto == null || dto.getRecordId() == null) {
             return Result.error(400, "记录ID不能为空");
         }
+
+        MaintenanceRecord existing = maintenanceRecordService.getById(dto.getRecordId());
+        if (existing == null) {
+            return Result.error(400, "记录不存在");
+        }
+        if (existing.getStatus() == null || (existing.getStatus() != 0 && existing.getStatus() != 1)) {
+            return Result.error(400, "仅允许对未完成工单提交完工材料");
+        }
+
+        String batteryIdToUse = StringUtils.hasText(dto.getBatteryId()) ? dto.getBatteryId().trim() : existing.getBatteryId();
+        if (!StringUtils.hasText(batteryIdToUse)) {
+            return Result.error(400, "电池ID不能为空");
+        }
+        BatteryInfo battery = batteryInfoService.getById(batteryIdToUse);
+        if (battery == null) {
+            return Result.error(400, "电池不存在");
+        }
+        if (battery.getStatus() != null && (battery.getStatus() == 2 || battery.getStatus() == 6)) {
+            return Result.error(400, "当前电池状态不允许提交维修");
+        }
+        LambdaQueryWrapper<MaintenanceRecord> pendingWrapper = new LambdaQueryWrapper<>();
+        pendingWrapper.eq(MaintenanceRecord::getBatteryId, batteryIdToUse);
+        pendingWrapper.in(MaintenanceRecord::getStatus, 0, 1);
+        pendingWrapper.ne(MaintenanceRecord::getRecordId, dto.getRecordId());
+        if (maintenanceRecordService.count(pendingWrapper) > 0) {
+            return Result.error(400, "该电池已有未完成工单");
+        }
+
+        String faultTypeToUse = StringUtils.hasText(dto.getFaultType()) ? dto.getFaultType().trim() : existing.getFaultType();
+        if (!StringUtils.hasText(faultTypeToUse)) {
+            return Result.error(400, "故障类型不能为空");
+        }
+        String descriptionToUse = StringUtils.hasText(dto.getDescription()) ? dto.getDescription().trim() : existing.getDescription();
+        if (!StringUtils.hasText(descriptionToUse)) {
+            return Result.error(400, "维修内容不能为空");
+        }
+        String maintainerToUse = StringUtils.hasText(dto.getMaintainer()) ? dto.getMaintainer().trim() : existing.getMaintainer();
+        if (!StringUtils.hasText(maintainerToUse)) {
+            maintainerToUse = getCurrentUserDisplayName(request);
+        }
+        if (!StringUtils.hasText(maintainerToUse)) {
+            return Result.error(400, "维修人不能为空");
+        }
+        String issueMaterialDescToUse = StringUtils.hasText(dto.getIssueMaterialDesc()) ? dto.getIssueMaterialDesc().trim() : existing.getIssueMaterialDesc();
+        if (!StringUtils.hasText(issueMaterialDescToUse)) {
+            return Result.error(400, "故障材料说明不能为空");
+        }
+        String issueMaterialUrlToUse = StringUtils.hasText(dto.getIssueMaterialUrl()) ? dto.getIssueMaterialUrl().trim() : existing.getIssueMaterialUrl();
+        if (!StringUtils.hasText(issueMaterialUrlToUse)) {
+            return Result.error(400, "故障材料文件不能为空");
+        }
+        try {
+            java.util.List<String> urls = JSONUtil.parseArray(issueMaterialUrlToUse).toList(String.class);
+            if (urls == null || urls.isEmpty()) {
+                return Result.error(400, "故障材料文件不能为空");
+            }
+        } catch (Exception e) {
+            return Result.error(400, "故障材料文件格式不合法");
+        }
+
         String solution = dto.getSolution();
         if (!StringUtils.hasText(solution)) {
             return Result.error(400, "解决方案不能为空");
@@ -619,16 +628,14 @@ public class BatteryBusinessController {
             return Result.error(400, "完工材料文件格式不合法");
         }
 
-        MaintenanceRecord existing = maintenanceRecordService.getById(dto.getRecordId());
-        if (existing == null) {
-            return Result.error(400, "记录不存在");
-        }
-        if (existing.getStatus() == null || existing.getStatus() != 1) {
-            return Result.error(400, "仅允许对已通过审核的维修记录提交完工材料");
-        }
-
         MaintenanceRecord update = new MaintenanceRecord();
         update.setRecordId(dto.getRecordId());
+        update.setBatteryId(batteryIdToUse);
+        update.setFaultType(faultTypeToUse);
+        update.setDescription(descriptionToUse);
+        update.setMaintainer(maintainerToUse);
+        update.setIssueMaterialDesc(issueMaterialDescToUse);
+        update.setIssueMaterialUrl(issueMaterialUrlToUse);
         update.setSolution(solution.trim());
         update.setCompletionMaterialDesc(completionDesc.trim());
         update.setCompletionMaterialUrl(completionUrl.trim());
@@ -676,6 +683,12 @@ public class BatteryBusinessController {
     @lombok.Data
     public static class MaintenanceCompleteDto {
         private Long recordId;
+        private String batteryId;
+        private String faultType;
+        private String description;
+        private String maintainer;
+        private String issueMaterialDesc;
+        private String issueMaterialUrl;
         private String solution;
         private String completionMaterialDesc;
         private String completionMaterialUrl;

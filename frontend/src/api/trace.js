@@ -85,6 +85,14 @@ export function calcRecyclingValuation(data) {
   })
 }
 
+export function trainRecyclingValuationAi(data) {
+  return request({
+    url: '/trace/recycling/valuation/ai/train',
+    method: 'post',
+    data
+  })
+}
+
 export function confirmRecyclingPrice(data) {
   return request({
     url: '/trace/recycling/valuation/confirm',

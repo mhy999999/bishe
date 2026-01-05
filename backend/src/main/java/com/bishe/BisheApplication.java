@@ -63,6 +63,11 @@ public class BisheApplication {
                 jdbcTemplate.execute("ALTER TABLE chain_transaction MODIFY contract_addr VARCHAR(42) NULL");
             } catch (Exception ignored) {
             }
+
+            try {
+                jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS ai_recycling_model (id INT PRIMARY KEY, model_json TEXT, train_samples INT DEFAULT 0, update_time DATETIME)");
+            } catch (Exception ignored) {
+            }
         };
     }
 
