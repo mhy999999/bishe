@@ -27,10 +27,14 @@
       </el-table-column>
       <el-table-column label="交易哈希" align="center" width="200">
         <template #default="{ row }">
-          <el-tooltip :content="row.txHash" placement="top" effect="light">
-            <el-link type="primary" underline="never">{{ row.txHash ? row.txHash.substring(0, 10) + '...' : '未上链'
-            }}</el-link>
-          </el-tooltip>
+          <template v-if="row.txHash">
+            <el-tooltip :content="row.txHash" placement="top" effect="light">
+              <el-link type="primary" underline="never" @click.stop="openTxHash(row.txHash)">
+                {{ row.txHash.substring(0, 10) + '...' }}
+              </el-link>
+            </el-tooltip>
+          </template>
+          <span v-else>未上链</span>
         </template>
       </el-table-column>
     </el-table>
@@ -83,12 +87,13 @@ import { getTransferList, saveTransfer } from '@/api/trace'
 import Pagination from '@/components/Pagination/index.vue'
 import { ElMessage } from 'element-plus'
 import { InfoFilled } from '@element-plus/icons-vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 
 const list = ref([])
 const total = ref(0)
 const listLoading = ref(true)
 const route = useRoute()
+const router = useRouter()
 const listQuery = reactive({
   pageNum: 1,
   pageSize: 10,
@@ -121,6 +126,12 @@ const getList = () => {
     total.value = 0
     listLoading.value = false
   })
+}
+
+const openTxHash = (txHash) => {
+  const hash = String(txHash || '').trim()
+  if (!hash) return
+  router.push({ name: 'Trace', query: { txHash: hash } })
 }
 
 const handleFilter = () => {
