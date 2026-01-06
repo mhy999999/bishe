@@ -12,37 +12,66 @@
           </el-button>
         </div>
 
-        <el-table v-loading="traceLoading" :data="traceEvents" border fit highlight-current-row style="width: 100%;">
-          <el-table-column label="时间" prop="timeText" align="center" width="180" />
-          <el-table-column label="事件" prop="typeText" align="center" width="120">
-            <template #default="{ row }">
-              <el-tag :type="row.typeTag || 'info'">{{ row.typeText }}</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="内容" prop="content" align="left" />
-          <el-table-column label="TxHash" align="center" width="200">
-            <template #default="{ row }">
-              <template v-if="row.txHash">
-                <el-tooltip :content="row.txHash" placement="top" effect="light">
-                  <el-link type="primary" underline="never" @click="openTxHash(row.txHash)">
-                    {{ row.txHash.substring(0, 10) + '...' }}
-                  </el-link>
-                </el-tooltip>
+        <template v-if="showAllBatteries">
+          <el-table :data="batteryOptions" border fit highlight-current-row style="width: 100%;">
+            <el-table-column label="电池ID" prop="batteryId" align="center" width="220" />
+            <el-table-column label="生产商" prop="manufacturer" align="center" width="160" />
+            <el-table-column label="类型" prop="typeCode" align="center" width="120" />
+            <el-table-column label="容量(kWh)" prop="capacity" align="center" width="120" />
+            <el-table-column label="电压(V)" prop="voltage" align="center" width="120" />
+            <el-table-column label="状态" prop="status" align="center" width="120">
+              <template #default="{ row }">
+                <el-tag :type="batteryStatusMap[row?.status]?.type || 'info'">
+                  {{ batteryStatusMap[row?.status]?.text || (row?.status ?? '-') }}
+                </el-tag>
               </template>
-              <span v-else>-</span>
-            </template>
-          </el-table-column>
-        </el-table>
+            </el-table-column>
+            <el-table-column label="生产日期" prop="produceDate" align="center" width="140">
+              <template #default="{ row }">
+                <span>{{ row.produceDate || '-' }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" align="center" width="120">
+              <template #default="{ row }">
+                <el-button type="primary" link @click.stop="openBatteryTrace(row.batteryId)">查看溯源</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </template>
 
-        <el-card v-if="traceEvents.length" shadow="never" style="margin-top: 12px;">
-          <template #header>
-            <div style="display:flex; align-items:center; justify-content:space-between;">
-              <span>生命周期图</span>
-              <span style="color:#909399; font-size:12px;">可拖拽/缩放，点击节点查看TxHash</span>
-            </div>
-          </template>
-          <div ref="batteryChartRef" class="trace-chart" />
-        </el-card>
+        <template v-else>
+          <el-table v-loading="traceLoading" :data="traceEvents" border fit highlight-current-row style="width: 100%;">
+            <el-table-column label="时间" prop="timeText" align="center" width="180" />
+            <el-table-column label="事件" prop="typeText" align="center" width="120">
+              <template #default="{ row }">
+                <el-tag :type="row.typeTag || 'info'">{{ row.typeText }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="内容" prop="content" align="left" />
+            <el-table-column label="TxHash" align="center" width="200">
+              <template #default="{ row }">
+                <template v-if="row.txHash">
+                  <el-tooltip :content="row.txHash" placement="top" effect="light">
+                    <el-link type="primary" underline="never" @click="openTxHash(row.txHash)">
+                      {{ row.txHash.substring(0, 10) + '...' }}
+                    </el-link>
+                  </el-tooltip>
+                </template>
+                <span v-else>-</span>
+              </template>
+            </el-table-column>
+          </el-table>
+
+          <el-card v-if="traceEvents.length" shadow="never" style="margin-top: 12px;">
+            <template #header>
+              <div style="display:flex; align-items:center; justify-content:space-between;">
+                <span>生命周期图</span>
+                <span style="color:#909399; font-size:12px;">可拖拽/缩放，点击节点查看TxHash</span>
+              </div>
+            </template>
+            <div ref="batteryChartRef" class="trace-chart" />
+          </el-card>
+        </template>
       </el-tab-pane>
 
       <el-tab-pane label="按交易查询" name="tx">
@@ -173,6 +202,16 @@ const batteryQuery = reactive({
 })
 const traceEvents = ref([])
 const traceLoading = ref(false)
+
+const batteryIdTrimmed = computed(() => String(batteryQuery.batteryIdInput || '').trim())
+const showAllBatteries = computed(() => activeTab.value === 'battery' && !batteryIdTrimmed.value)
+const batteryStatusMap = {
+  1: { text: '生产', type: 'info' },
+  2: { text: '销售', type: 'success' },
+  3: { text: '使用', type: 'warning' },
+  4: { text: '维修', type: 'danger' },
+  5: { text: '回收', type: 'danger' }
+}
 
 const txBatteryId = ref('')
 const txTraceEvents = ref([])
@@ -815,8 +854,7 @@ const extractBatteryIdFromChainRow = (row) => {
 }
 
 const handleBatteryFilter = () => {
-  const input = String(batteryQuery.batteryIdInput || '').trim()
-  const id = input || undefined
+  const id = batteryIdTrimmed.value || undefined
   activeTab.value = 'battery'
 
   if (id) {
@@ -835,6 +873,13 @@ const handleBatteryFilter = () => {
   if (needReplace) {
     router.replace({ name: route.name, query })
   }
+}
+
+const openBatteryTrace = (batteryId) => {
+  const id = String(batteryId || '').trim()
+  if (!id) return
+  batteryQuery.batteryIdInput = id
+  handleBatteryFilter()
 }
 
 const openTxHash = (txHash) => {
@@ -883,6 +928,16 @@ onMounted(async () => {
     }
   }
 })
+
+watch(
+  () => [activeTab.value, batteryIdTrimmed.value],
+  ([tab, id]) => {
+    if (tab !== 'battery') return
+    if (!id) {
+      traceEvents.value = []
+    }
+  }
+)
 
 watch(
   () => traceEvents.value,
