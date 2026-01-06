@@ -297,44 +297,32 @@
 - Maven + JDK 19（后端 `pom.xml` 指定 Java 19）
 - MySQL 8.x
 
-### 7.2 项目启动
+### 7.2 启动顺序
 
-2) 安装并启动 Hardhat（可选：需要“上链存证/链上交易”才启动）
-
-安装依赖（只要 `package-lock.json` 在，每次删依赖后重新安装即可）：
+1) MySQL：导入/创建数据库 `bishe`（表结构可参考 `DATABASE_SCHEMA.md`）
+2) Hardhat（可选，上链存证）：
 
 ```bash
 cd hardhat
 npm install
+npx hardhat node
 ```
 
-启动本地链（保持运行，不要关终端）：
-
-```bash
-npm run node
-```
-
-另开一个终端部署合约（每次重启 Hardhat 节点后都需要重新部署一次）：
+另开终端部署合约：
 
 ```bash
 cd hardhat
-npm run deploy:localhost
+npm run deploy
 ```
 
-部署后会生成：`hardhat/deployments/localhost.json`，后端会读取该文件获取合约地址。
-
-3) 启动后端（必须）
-
-首次会通过 Maven 自动下载依赖：
+3) 后端：
 
 ```bash
 cd backend
 mvn -DskipTests spring-boot:run
 ```
 
-说明：为了保证后端进程稳定运行，项目默认关闭了 devtools 的自动重启（见 `application.yml` 的 `spring.devtools.restart.enabled=false`）。修改后端代码后需要手动重启后端才能生效。
-
-4) 安装并启动前端（必须）
+4) 前端：
 
 ```bash
 cd frontend
@@ -344,9 +332,8 @@ npm run dev
 
 默认访问：
 
-- 前端：http://localhost:3000/
+- 前端：http://localhost:5173/
 - 后端：http://localhost:8084/
-- Hardhat RPC：http://127.0.0.1:8545/
 
 ### 7.3 默认账号
 
