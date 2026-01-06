@@ -149,10 +149,19 @@ public class TraceabilityController {
     @GetMapping("/chain/list")
     public Result<Page<ChainTransaction>> listChain(@RequestParam(defaultValue = "1") Integer pageNum,
                                                     @RequestParam(defaultValue = "10") Integer pageSize,
-                                                    @RequestParam(required = false) String txHash) {
+                                                    @RequestParam(required = false) String txHash,
+                                                    @RequestParam(required = false) String methodName,
+                                                    @RequestParam(required = false) String batteryId) {
         Page<ChainTransaction> page = new Page<>(pageNum, pageSize);
         LambdaQueryWrapper<ChainTransaction> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(StringUtils.hasText(txHash), ChainTransaction::getTxHash, txHash);
+        wrapper.eq(StringUtils.hasText(methodName), ChainTransaction::getMethodName, methodName);
+        if (StringUtils.hasText(batteryId)) {
+            String id = batteryId.trim();
+            wrapper.and(w -> w.like(ChainTransaction::getParams, "\"batteryId\":\"" + id + "\"")
+                    .or()
+                    .like(ChainTransaction::getParams, "\"battery_id\":\"" + id + "\""));
+        }
         wrapper.orderByDesc(ChainTransaction::getCreateTime);
         return Result.success(chainService.page(page, wrapper));
     }
@@ -257,7 +266,7 @@ public class TraceabilityController {
         }
         sysAuditService.submitAudit("RECYCLING", appraisal.getAppraisalId().toString(), applyUser);
 
-        chainService.submitTransaction(
+        String applyTxHash = chainService.submitTransaction(
                 "submitRecyclingApply",
                 cn.hutool.json.JSONUtil.toJsonStr(java.util.Map.of(
                         "appraisalId", appraisal.getAppraisalId(),
@@ -270,6 +279,15 @@ public class TraceabilityController {
                         "snapshotBatteryStatus", appraisal.getSnapshotBatteryStatus()
                 ))
         );
+
+        if (StringUtils.hasText(applyTxHash)) {
+            RecyclingAppraisal update = new RecyclingAppraisal();
+            update.setAppraisalId(appraisal.getAppraisalId());
+            update.setDataHash(applyTxHash);
+            update.setUpdateTime(LocalDateTime.now());
+            recyclingService.updateById(update);
+            appraisal.setDataHash(applyTxHash);
+        }
         return Result.success(appraisal);
     }
 
@@ -1008,10 +1026,13 @@ public class TraceabilityController {
     @GetMapping("/vehicle/list")
     public Result<Page<VehicleInfo>> listVehicle(@RequestParam(defaultValue = "1") Integer pageNum,
                                                  @RequestParam(defaultValue = "10") Integer pageSize,
-                                                 @RequestParam(required = false) String vin) {
+                                                 @RequestParam(required = false) String vin,
+                                                 @RequestParam(required = false) String batteryId) {
         Page<VehicleInfo> page = new Page<>(pageNum, pageSize);
         LambdaQueryWrapper<VehicleInfo> wrapper = new LambdaQueryWrapper<>();
         wrapper.like(StringUtils.hasText(vin), VehicleInfo::getVin, vin);
+        wrapper.like(StringUtils.hasText(batteryId), VehicleInfo::getBatteryId, batteryId);
+        wrapper.orderByDesc(VehicleInfo::getBindTime);
         return Result.success(vehicleService.page(page, wrapper));
     }
 

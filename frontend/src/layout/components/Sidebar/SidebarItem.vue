@@ -2,7 +2,7 @@
   <div v-if="!item.hidden">
     <template
       v-if="hasOneShowingChild(item.children, item) && (!onlyOneChild.children || onlyOneChild.noShowingChildren) && !item.alwaysShow">
-      <el-menu-item :index="resolvePath(onlyOneChild.path)" :class="{ 'submenu-title-noDropdown': !isNest }">
+      <el-menu-item :index="getMenuItemIndex(item, onlyOneChild)" :class="{ 'submenu-title-noDropdown': !isNest }">
         <el-icon v-if="onlyOneChild.meta && onlyOneChild.meta.icon">
           <component :is="onlyOneChild.meta.icon" />
         </el-icon>
@@ -87,6 +87,24 @@ const resolvePath = (routePath) => {
     return props.basePath + routePath
   }
   return props.basePath + '/' + routePath
+}
+
+const resolveFullPath = (parentPath, childPath) => {
+  const base = resolvePath(parentPath)
+  const child = String(childPath || '')
+  if (!child) return base
+  if (isExternal(child)) return child
+  if (child.startsWith('/')) return child
+  if (isExternal(base)) return base
+  if (!base || base === '/') return '/' + child
+  return base.replace(/\/$/, '') + '/' + child
+}
+
+const getMenuItemIndex = (parentItem, resolvedChild) => {
+  if (resolvedChild?.noShowingChildren) {
+    return resolvePath(parentItem?.path)
+  }
+  return resolveFullPath(parentItem?.path, resolvedChild?.path)
 }
 
 function isExternal(path) {

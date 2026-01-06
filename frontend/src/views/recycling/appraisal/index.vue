@@ -100,7 +100,8 @@
       <template #footer>
         <div class="dialog-footer">
           <el-button @click="auditDialogVisible = false">取消</el-button>
-          <el-button type="primary" :loading="auditSubmitting" :disabled="auditSubmitting" @click="submitAudit">提交</el-button>
+          <el-button type="primary" :loading="auditSubmitting" :disabled="auditSubmitting"
+            @click="submitAudit">提交</el-button>
         </div>
       </template>
     </el-dialog>
@@ -150,7 +151,7 @@
           </template>
 
           <div v-if="activeRow?.performanceReportUrl">
-            <el-link type="primary" :underline="false" @click="openFileInNewTab(activeRow.performanceReportUrl)">
+            <el-link type="primary" underline="never" @click="openFileInNewTab(activeRow.performanceReportUrl)">
               打开报告
             </el-link>
           </div>
@@ -161,14 +162,6 @@
           <template #header>
             <div style="display:flex; align-items:center; justify-content:space-between;">
               <span>估值与确认</span>
-              <div>
-                <el-button v-if="canAudit" type="warning" size="small" :loading="aiTraining" @click="trainAiValuation">
-                  AI微调训练
-                </el-button>
-                <el-button type="primary" size="small" :loading="valuationCalculating" @click="calcValuation">
-                  AI计算估值
-                </el-button>
-              </div>
             </div>
           </template>
 
@@ -186,7 +179,56 @@
           <div style="margin-top: 8px;">
             <el-descriptions :column="1" border>
               <el-descriptions-item label="估值依据">
-                <span style="white-space: pre-wrap;">{{ activeRow?.valuationBasis || '-' }}</span>
+                <div class="valuation-basis">
+                  <div v-if="!activeValuationBasisText" class="valuation-basis__empty">-</div>
+                  <template v-else>
+                    <div class="valuation-basis__meta">
+                      <el-tag v-if="activeValuationBasisInfo.model" size="small" type="info" effect="plain">
+                        模型：{{ activeValuationBasisInfo.model }}
+                      </el-tag>
+                      <el-tag v-if="activeValuationBasisInfo.samples != null" size="small" type="success"
+                        effect="plain">
+                        样本：{{ activeValuationBasisInfo.samples }}
+                      </el-tag>
+                      <el-tag v-if="activeValuationBasisInfo.featuresCount" size="small" type="warning" effect="plain">
+                        特征：{{ activeValuationBasisInfo.featuresCount }}项
+                      </el-tag>
+                      <el-button text size="small" @click="valuationBasisExpanded = !valuationBasisExpanded">
+                        {{ valuationBasisExpanded ? '收起详情' : '展开详情' }}
+                      </el-button>
+                    </div>
+
+                    <div v-if="activeValuationBasisInfo.previewFeatures.length" class="valuation-basis__features">
+                      <div class="valuation-basis__label">使用特征</div>
+                      <div class="valuation-basis__tags">
+                        <el-tag v-for="f in activeValuationBasisInfo.previewFeatures" :key="f" size="small"
+                          effect="plain">
+                          {{ humanizeFeatureName(f) }}
+                        </el-tag>
+                        <span v-if="activeValuationBasisInfo.moreFeaturesCount" class="valuation-basis__more">
+                          +{{ activeValuationBasisInfo.moreFeaturesCount }}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div v-if="activeValuationBasisInfo.metrics.length" class="valuation-basis__features">
+                      <div class="valuation-basis__label">关键数值</div>
+                      <div class="valuation-basis__tags">
+                        <el-tag v-for="m in activeValuationBasisInfo.metrics" :key="m.key" size="small" type="info"
+                          effect="plain">
+                          {{ m.label }}：{{ m.value }}
+                        </el-tag>
+                      </div>
+                      <div v-if="activeValuationBasisInfo.formula" class="valuation-basis__formula">
+                        公式：{{ activeValuationBasisInfo.formula }}
+                      </div>
+                    </div>
+
+                    <div v-if="valuationBasisExpanded" class="valuation-basis__raw">
+                      <pre class="valuation-basis__pre">{{ activeValuationBasisText }}</pre>
+                    </div>
+                  </template>
+                </div>
               </el-descriptions-item>
             </el-descriptions>
           </div>
@@ -212,10 +254,64 @@
           <span style="white-space: pre-wrap;">{{ receiptData?.auditOpinion || '-' }}</span>
         </el-descriptions-item>
         <el-descriptions-item label="估值依据" :span="2">
-          <span style="white-space: pre-wrap;">{{ receiptData?.valuationBasis || '-' }}</span>
+          <div class="valuation-basis">
+            <div v-if="!receiptValuationBasisText" class="valuation-basis__empty">-</div>
+            <template v-else>
+              <div class="valuation-basis__meta">
+                <el-tag v-if="receiptValuationBasisInfo.model" size="small" type="info" effect="plain">
+                  模型：{{ receiptValuationBasisInfo.model }}
+                </el-tag>
+                <el-tag v-if="receiptValuationBasisInfo.samples != null" size="small" type="success" effect="plain">
+                  样本：{{ receiptValuationBasisInfo.samples }}
+                </el-tag>
+                <el-tag v-if="receiptValuationBasisInfo.featuresCount" size="small" type="warning" effect="plain">
+                  特征：{{ receiptValuationBasisInfo.featuresCount }}项
+                </el-tag>
+                <el-button text size="small" @click="receiptBasisExpanded = !receiptBasisExpanded">
+                  {{ receiptBasisExpanded ? '收起详情' : '展开详情' }}
+                </el-button>
+              </div>
+
+              <div v-if="receiptValuationBasisInfo.previewFeatures.length" class="valuation-basis__features">
+                <div class="valuation-basis__label">使用特征</div>
+                <div class="valuation-basis__tags">
+                  <el-tag v-for="f in receiptValuationBasisInfo.previewFeatures" :key="f" size="small" effect="plain">
+                    {{ humanizeFeatureName(f) }}
+                  </el-tag>
+                  <span v-if="receiptValuationBasisInfo.moreFeaturesCount" class="valuation-basis__more">
+                    +{{ receiptValuationBasisInfo.moreFeaturesCount }}
+                  </span>
+                </div>
+              </div>
+
+              <div v-if="receiptValuationBasisInfo.metrics.length" class="valuation-basis__features">
+                <div class="valuation-basis__label">关键数值</div>
+                <div class="valuation-basis__tags">
+                  <el-tag v-for="m in receiptValuationBasisInfo.metrics" :key="m.key" size="small" type="info"
+                    effect="plain">
+                    {{ m.label }}：{{ m.value }}
+                  </el-tag>
+                </div>
+                <div v-if="receiptValuationBasisInfo.formula" class="valuation-basis__formula">
+                  公式：{{ receiptValuationBasisInfo.formula }}
+                </div>
+              </div>
+
+              <div v-if="receiptBasisExpanded" class="valuation-basis__raw">
+                <pre class="valuation-basis__pre">{{ receiptValuationBasisText }}</pre>
+              </div>
+            </template>
+          </div>
         </el-descriptions-item>
         <el-descriptions-item label="上链哈希" :span="2">
-          <span>{{ receiptData?.receiptHash || '-' }}</span>
+          <template v-if="receiptData?.receiptHash">
+            <el-tooltip :content="receiptData.receiptHash" placement="top" effect="light">
+              <el-link type="primary" underline="never" @click="openTxHash(receiptData.receiptHash)">
+                {{ getTxHashShort(receiptData.receiptHash) }}
+              </el-link>
+            </el-tooltip>
+          </template>
+          <span v-else>-</span>
         </el-descriptions-item>
       </el-descriptions>
 
@@ -230,6 +326,44 @@
             <el-descriptions-item label="容量">{{ receiptData?.batteryInfo?.capacity ?? '-' }}</el-descriptions-item>
             <el-descriptions-item label="电压">{{ receiptData?.batteryInfo?.voltage ?? '-' }}</el-descriptions-item>
           </el-descriptions>
+        </el-card>
+      </div>
+
+      <div v-if="receiptData?.receiptHash" v-loading="receiptChainLoading" style="margin-top: 12px;">
+        <el-card shadow="never">
+          <template #header>
+            <div style="display:flex; align-items:center; justify-content:space-between;">
+              <span>区块链存证</span>
+              <el-button size="small" text type="primary" @click="openTxHash(receiptData.receiptHash)">进入溯源</el-button>
+            </div>
+          </template>
+          <el-descriptions v-if="receiptChainRow" :column="2" border size="small">
+            <el-descriptions-item label="TxHash" :span="2">
+              <el-tooltip :content="receiptChainRow.txHash" placement="top" effect="light">
+                <el-link type="primary" underline="never" @click="openTxHash(receiptChainRow.txHash)">
+                  {{ getTxHashShort(receiptChainRow.txHash) }}
+                </el-link>
+              </el-tooltip>
+            </el-descriptions-item>
+            <el-descriptions-item label="区块高度">{{ receiptChainRow.blockHeight != null ? ('#' +
+              receiptChainRow.blockHeight)
+              : '-' }}</el-descriptions-item>
+            <el-descriptions-item label="链ID">{{ receiptChainRow.chainId ?? '-' }}</el-descriptions-item>
+            <el-descriptions-item label="方法">{{ receiptChainRow.methodName || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="状态">
+              <el-tag :type="receiptChainRow.status === 1 ? 'success' : 'danger'">
+                {{ receiptChainRow.status === 1 ? '成功' : '失败' }}
+              </el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item label="合约地址" :span="2">{{ receiptChainRow.contractAddr || '-'
+            }}</el-descriptions-item>
+            <el-descriptions-item label="上链时间" :span="2">{{ formatDateTime(receiptChainRow.createTime)
+            }}</el-descriptions-item>
+            <el-descriptions-item v-if="receiptChainRow.errorMessage" label="错误信息" :span="2">
+              <span style="white-space: pre-wrap;">{{ receiptChainRow.errorMessage }}</span>
+            </el-descriptions-item>
+          </el-descriptions>
+          <el-empty v-else description="暂无交易详情" />
         </el-card>
       </div>
 
@@ -266,11 +400,68 @@
         </el-descriptions-item>
         <el-descriptions-item label="预估价">{{ formatMoney(activeRow?.preliminaryValue) }}</el-descriptions-item>
         <el-descriptions-item label="最终价">{{ formatMoney(activeRow?.finalValue) }}</el-descriptions-item>
+        <el-descriptions-item label="申请哈希" :span="2">
+          <template v-if="activeRow?.dataHash">
+            <el-tooltip :content="activeRow.dataHash" placement="top" effect="light">
+              <el-link type="primary" underline="never" @click="openTxHash(activeRow.dataHash)">
+                {{ getTxHashShort(activeRow.dataHash) }}
+              </el-link>
+            </el-tooltip>
+          </template>
+          <span v-else>-</span>
+        </el-descriptions-item>
         <el-descriptions-item label="估值依据" :span="2">
-          <span style="white-space: pre-wrap;">{{ activeRow?.valuationBasis || '-' }}</span>
+          <div class="valuation-basis">
+            <div v-if="!detailValuationBasisText" class="valuation-basis__empty">-</div>
+            <template v-else>
+              <div class="valuation-basis__meta">
+                <el-tag v-if="detailValuationBasisInfo.model" size="small" type="info" effect="plain">
+                  模型：{{ detailValuationBasisInfo.model }}
+                </el-tag>
+                <el-tag v-if="detailValuationBasisInfo.samples != null" size="small" type="success" effect="plain">
+                  样本：{{ detailValuationBasisInfo.samples }}
+                </el-tag>
+                <el-tag v-if="detailValuationBasisInfo.featuresCount" size="small" type="warning" effect="plain">
+                  特征：{{ detailValuationBasisInfo.featuresCount }}项
+                </el-tag>
+                <el-button text size="small" @click="detailBasisExpanded = !detailBasisExpanded">
+                  {{ detailBasisExpanded ? '收起详情' : '展开详情' }}
+                </el-button>
+              </div>
+
+              <div v-if="detailValuationBasisInfo.previewFeatures.length" class="valuation-basis__features">
+                <div class="valuation-basis__label">使用特征</div>
+                <div class="valuation-basis__tags">
+                  <el-tag v-for="f in detailValuationBasisInfo.previewFeatures" :key="f" size="small" effect="plain">
+                    {{ humanizeFeatureName(f) }}
+                  </el-tag>
+                  <span v-if="detailValuationBasisInfo.moreFeaturesCount" class="valuation-basis__more">
+                    +{{ detailValuationBasisInfo.moreFeaturesCount }}
+                  </span>
+                </div>
+              </div>
+
+              <div v-if="detailValuationBasisInfo.metrics.length" class="valuation-basis__features">
+                <div class="valuation-basis__label">关键数值</div>
+                <div class="valuation-basis__tags">
+                  <el-tag v-for="m in detailValuationBasisInfo.metrics" :key="m.key" size="small" type="info"
+                    effect="plain">
+                    {{ m.label }}：{{ m.value }}
+                  </el-tag>
+                </div>
+                <div v-if="detailValuationBasisInfo.formula" class="valuation-basis__formula">
+                  公式：{{ detailValuationBasisInfo.formula }}
+                </div>
+              </div>
+
+              <div v-if="detailBasisExpanded" class="valuation-basis__raw">
+                <pre class="valuation-basis__pre">{{ detailValuationBasisText }}</pre>
+              </div>
+            </template>
+          </div>
         </el-descriptions-item>
         <el-descriptions-item label="报告">
-          <el-link v-if="activeRow?.performanceReportUrl" type="primary" :underline="false"
+          <el-link v-if="activeRow?.performanceReportUrl" type="primary" underline="never"
             @click="openFileInNewTab(activeRow.performanceReportUrl)">
             打开
           </el-link>
@@ -281,6 +472,43 @@
           <span>{{ activeRow?.receiptHash || '-' }}</span>
         </el-descriptions-item>
       </el-descriptions>
+
+      <div v-if="detailTxHashToShow" v-loading="detailChainLoading" style="margin-top: 12px;">
+        <el-card shadow="never">
+          <template #header>
+            <div style="display:flex; align-items:center; justify-content:space-between;">
+              <span>区块链存证</span>
+              <el-button size="small" text type="primary" @click="openTxHash(detailTxHashToShow)">进入溯源</el-button>
+            </div>
+          </template>
+          <el-descriptions v-if="detailChainRow" :column="2" border size="small">
+            <el-descriptions-item label="TxHash" :span="2">
+              <el-tooltip :content="detailChainRow.txHash" placement="top" effect="light">
+                <el-link type="primary" underline="never" @click="openTxHash(detailChainRow.txHash)">
+                  {{ getTxHashShort(detailChainRow.txHash) }}
+                </el-link>
+              </el-tooltip>
+            </el-descriptions-item>
+            <el-descriptions-item label="区块高度">{{ detailChainRow.blockHeight != null ? ('#' +
+              detailChainRow.blockHeight) :
+              '-' }}</el-descriptions-item>
+            <el-descriptions-item label="链ID">{{ detailChainRow.chainId ?? '-' }}</el-descriptions-item>
+            <el-descriptions-item label="方法">{{ detailChainRow.methodName || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="状态">
+              <el-tag :type="detailChainRow.status === 1 ? 'success' : 'danger'">
+                {{ detailChainRow.status === 1 ? '成功' : '失败' }}
+              </el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item label="合约地址" :span="2">{{ detailChainRow.contractAddr || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="上链时间" :span="2">{{ formatDateTime(detailChainRow.createTime)
+            }}</el-descriptions-item>
+            <el-descriptions-item v-if="detailChainRow.errorMessage" label="错误信息" :span="2">
+              <span style="white-space: pre-wrap;">{{ detailChainRow.errorMessage }}</span>
+            </el-descriptions-item>
+          </el-descriptions>
+          <el-empty v-else description="暂无交易详情" />
+        </el-card>
+      </div>
     </el-drawer>
   </div>
 </template>
@@ -291,7 +519,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import Pagination from '@/components/Pagination/index.vue'
 import { useUserStore } from '@/store/user'
-import { applyRecycling, auditRecycling, calcRecyclingValuation, confirmRecyclingPrice, getRecyclingList, getRecyclingReceipt, trainRecyclingValuationAi, uploadRecyclingPhoto, uploadRecyclingReport } from '@/api/trace'
+import { applyRecycling, auditRecycling, confirmRecyclingPrice, getChainList, getRecyclingList, getRecyclingReceipt, uploadRecyclingPhoto, uploadRecyclingReport } from '@/api/trace'
 
 const route = useRoute()
 const router = useRouter()
@@ -453,13 +681,47 @@ const openDetail = (row) => {
   detailVisible.value = true
 }
 
+const valuationBasisExpanded = ref(false)
+const receiptBasisExpanded = ref(false)
+const detailBasisExpanded = ref(false)
+
 const valuationDialogVisible = ref(false)
-const valuationCalculating = ref(false)
-const aiTraining = ref(false)
+const receiptDialogVisible = ref(false)
+const receiptData = ref(null)
 const confirmSubmitting = ref(false)
 const confirmForm = reactive({
   finalValue: ''
 })
+
+const receiptChainLoading = ref(false)
+const receiptChainRow = ref(null)
+const detailChainLoading = ref(false)
+const detailChainRow = ref(null)
+
+const getTxHashShort = (val) => {
+  const t = String(val || '').trim()
+  if (!t) return '-'
+  if (t.length <= 18) return t
+  return `${t.slice(0, 10)}...${t.slice(-6)}`
+}
+
+const loadChainTx = (txHash, targetRow, targetLoading) => {
+  const hash = String(txHash || '').trim()
+  if (!hash) {
+    targetRow.value = null
+    return
+  }
+  targetLoading.value = true
+  getChainList({ pageNum: 1, pageSize: 1, txHash: hash }).then((res) => {
+    const page = res?.data || res
+    const row = Array.isArray(page?.records) ? page.records[0] : null
+    targetRow.value = row || null
+  }).catch(() => {
+    targetRow.value = null
+  }).finally(() => {
+    targetLoading.value = false
+  })
+}
 
 const parseStringList = (raw) => {
   if (!raw) return []
@@ -499,8 +761,144 @@ const openValuationDialog = (row) => {
 watch(valuationDialogVisible, (val) => {
   if (!val) {
     confirmForm.finalValue = ''
+    valuationBasisExpanded.value = false
   }
 })
+
+watch(receiptDialogVisible, (val) => {
+  if (!val) {
+    receiptBasisExpanded.value = false
+  }
+})
+
+watch(detailVisible, (val) => {
+  if (!val) {
+    detailBasisExpanded.value = false
+  }
+})
+
+function normalizeValuationBasis(raw) {
+  const text = String(raw || '').trim()
+  return text
+}
+
+function extractKeyValue(text, key) {
+  if (!text || !key) return ''
+  const re = new RegExp(`(?:^|[;,])\\s*${key}\\s*=\\s*([^,;]+)`, 'i')
+  const m = text.match(re)
+  if (!m || !m[1]) return ''
+  return String(m[1]).trim()
+}
+
+function extractFormula(text) {
+  if (!text) return ''
+  const parts = String(text)
+    .split(';')
+    .map(s => s.trim())
+    .filter(Boolean)
+  if (parts.length < 2) return ''
+  const candidate = parts[1]
+  if (!candidate) return ''
+  if (candidate.includes('=') || candidate.toLowerCase().startsWith('features')) return ''
+  return candidate
+}
+
+function extractFeatures(text) {
+  if (!text) return []
+  const m = text.match(/features\s*=\s*\[([\s\S]*?)\]/i) || text.match(/features\s*:\s*\[([\s\S]*?)\]/i)
+  if (!m || !m[1]) return []
+  return String(m[1])
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean)
+}
+
+function extractSamples(text) {
+  if (!text) return null
+  const m = text.match(/samples\s*=\s*([0-9]+)/i) || text.match(/samples\s*:\s*([0-9]+)/i)
+  if (!m || !m[1]) return null
+  const n = Number(m[1])
+  return Number.isFinite(n) ? n : null
+}
+
+function extractModel(text) {
+  if (!text) return ''
+  const head = text.split(';')[0] || ''
+  const h = head.trim()
+  if (!h) return ''
+  if (h.includes('=') || h.includes(':')) return ''
+  return h
+}
+
+function buildValuationBasisInfo(raw) {
+  const text = normalizeValuationBasis(raw)
+  const features = extractFeatures(text)
+  const samples = extractSamples(text)
+  const model = extractModel(text)
+  const formula = extractFormula(text)
+  const capacity = extractKeyValue(text, 'capacity')
+  const voltage = extractKeyValue(text, 'voltage')
+  const capacityVoltage = extractKeyValue(text, 'capacityVoltage')
+  const maintenanceCount = extractKeyValue(text, 'maintenanceCount')
+  const batteryStatus = extractKeyValue(text, 'batteryStatus')
+  const metrics = [
+    { key: 'capacity', label: '容量(kWh)', value: capacity },
+    { key: 'voltage', label: '电压(V)', value: voltage },
+    { key: 'capacityVoltage', label: '容量×电压', value: capacityVoltage },
+    { key: 'maintenanceCount', label: '维修次数', value: maintenanceCount },
+    { key: 'batteryStatus', label: '状态码', value: batteryStatus }
+  ].filter(m => String(m.value || '').trim())
+  const previewLimit = 16
+  const previewFeatures = features.slice(0, previewLimit)
+  const moreFeaturesCount = Math.max(0, features.length - previewFeatures.length)
+  return {
+    model,
+    samples,
+    featuresCount: features.length,
+    previewFeatures,
+    moreFeaturesCount,
+    metrics,
+    formula
+  }
+}
+
+function humanizeFeatureName(raw) {
+  const t = String(raw || '').trim()
+  if (!t) return '-'
+  const dot = t.replaceAll('.', ' · ')
+  const snake = dot.replaceAll('_', ' ')
+  const camel = snake.replace(/([a-z])([A-Z])/g, '$1 $2')
+  return camel
+}
+
+const activeValuationBasisText = computed(() => normalizeValuationBasis(activeRow.value?.valuationBasis))
+const receiptValuationBasisText = computed(() => normalizeValuationBasis(receiptData.value?.valuationBasis))
+const detailValuationBasisText = computed(() => normalizeValuationBasis(activeRow.value?.valuationBasis))
+
+const activeValuationBasisInfo = computed(() => buildValuationBasisInfo(activeRow.value?.valuationBasis))
+const receiptValuationBasisInfo = computed(() => buildValuationBasisInfo(receiptData.value?.valuationBasis))
+const detailValuationBasisInfo = computed(() => buildValuationBasisInfo(activeRow.value?.valuationBasis))
+
+const detailTxHashToShow = computed(() => {
+  if (!detailVisible.value) return ''
+  const row = activeRow.value
+  return String(row?.receiptHash || row?.dataHash || '').trim()
+})
+
+watch(
+  () => receiptData.value?.receiptHash,
+  (hash) => {
+    loadChainTx(hash, receiptChainRow, receiptChainLoading)
+  }
+)
+
+watch(
+  detailTxHashToShow,
+  (hash) => {
+    loadChainTx(hash, detailChainRow, detailChainLoading)
+  },
+  { immediate: true }
+)
 
 const handlePhotoExceed = () => {
   ElMessage.warning('照片最多上传 10 张')
@@ -550,38 +948,6 @@ const handleReportUpload = (options) => {
   })
 }
 
-const calcValuation = () => {
-  if (!activeRow.value?.appraisalId) return
-  valuationCalculating.value = true
-  calcRecyclingValuation({ appraisalId: activeRow.value.appraisalId }).then((res) => {
-    const updated = res?.data || res
-    activeRow.value = { ...activeRow.value, ...(updated || {}) }
-    if (updated?.finalValue != null) {
-      confirmForm.finalValue = String(updated.finalValue)
-    }
-    ElMessage.success('估值已计算')
-    getList()
-  }).catch((err) => {
-    console.error(err)
-  }).finally(() => {
-    valuationCalculating.value = false
-  })
-}
-
-const trainAiValuation = () => {
-  if (aiTraining.value) return
-  aiTraining.value = true
-  trainRecyclingValuationAi({ ntrees: 300, maxDepth: 18, nodeSize: 5, subsample: 1.0 }).then((res) => {
-    const info = res?.data || res
-    const samples = info?.samples ?? '-'
-    ElMessage.success(`AI训练完成，样本数：${samples}`)
-  }).catch((err) => {
-    console.error(err)
-  }).finally(() => {
-    aiTraining.value = false
-  })
-}
-
 const confirmPrice = () => {
   if (!activeRow.value?.appraisalId) return
   const finalValue = Number(String(confirmForm.finalValue || '').trim())
@@ -600,9 +966,6 @@ const confirmPrice = () => {
     confirmSubmitting.value = false
   })
 }
-
-const receiptDialogVisible = ref(false)
-const receiptData = ref(null)
 
 const openReceiptDialog = (row) => {
   const id = row?.appraisalId
@@ -673,5 +1036,66 @@ watch(
   border-radius: 6px;
   overflow: hidden;
   border: 1px solid #ebeef5;
+}
+
+.valuation-basis {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.valuation-basis__empty {
+  color: #909399;
+}
+
+.valuation-basis__meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.valuation-basis__features {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.valuation-basis__label {
+  font-size: 12px;
+  color: #909399;
+}
+
+.valuation-basis__formula {
+  font-size: 12px;
+  color: #606266;
+}
+
+.valuation-basis__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.valuation-basis__more {
+  font-size: 12px;
+  color: #909399;
+  margin-left: 4px;
+}
+
+.valuation-basis__raw {
+  max-height: 120px;
+  border-radius: 4px;
+  border: 1px dashed #ebeef5;
+  background-color: #f8f9fb;
+  padding: 6px 8px;
+}
+
+.valuation-basis__pre {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 </style>

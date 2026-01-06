@@ -24,7 +24,7 @@
             <template #default="{ row }">
               <template v-if="row.txHash">
                 <el-tooltip :content="row.txHash" placement="top" effect="light">
-                  <el-link type="primary" :underline="false" @click="openTxHash(row.txHash)">
+                  <el-link type="primary" underline="never" @click="openTxHash(row.txHash)">
                     {{ row.txHash.substring(0, 10) + '...' }}
                   </el-link>
                 </el-tooltip>
@@ -48,7 +48,7 @@
       <el-tab-pane label="按交易查询" name="tx">
         <div class="filter-container">
           <el-input v-model="chainQuery.txHash" placeholder="交易哈希 (TxHash)" style="width: 300px;" class="filter-item"
-            @keyup.enter="handleTxFilter" />
+            clearable @keyup.enter="handleTxFilter" />
           <el-button class="filter-item" type="primary" icon="Search" @click="handleTxFilter">
             搜索交易
           </el-button>
@@ -58,7 +58,7 @@
           <el-table-column label="交易哈希" prop="txHash" align="center" width="220">
             <template #default="{ row }">
               <el-tooltip :content="row.txHash" placement="top">
-                <el-link type="primary" :underline="false" @click="openTxHash(row.txHash)">
+                <el-link type="primary" underline="never" @click="openTxHash(row.txHash)">
                   {{ row.txHash?.substring(0, 18) }}...
                 </el-link>
               </el-tooltip>
@@ -122,7 +122,8 @@
           </el-table-column>
         </el-table>
 
-        <el-card v-if="chainQuery.txHash || txTraceLoading || txChartEvents.length" shadow="never" style="margin-top: 12px;">
+        <el-card v-if="chainQuery.txHash || txTraceLoading || txChartEvents.length" shadow="never"
+          style="margin-top: 12px;">
           <template #header>
             <div style="display:flex; align-items:center; justify-content:space-between;">
               <span>关联电池生命周期图</span>
@@ -146,7 +147,7 @@
 import { ref, reactive, onMounted, watch, nextTick, onBeforeUnmount, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getBatteryList } from '@/api/battery'
-import { getChainList, getMaintenanceList, getRecyclingList, getSalesList, getTransferList } from '@/api/trace'
+import { getChainList, getMaintenanceList, getRecyclingList, getSalesList, getTransferList, getVehicleList } from '@/api/trace'
 import Pagination from '@/components/Pagination/index.vue'
 import { ElMessage } from 'element-plus'
 import { InfoFilled } from '@element-plus/icons-vue'
@@ -155,7 +156,7 @@ import * as echarts from 'echarts'
 const route = useRoute()
 const router = useRouter()
 
-const activeTab = ref('battery')
+const activeTab = ref('tx')
 
 const chainList = ref([])
 const chainTotal = ref(0)
@@ -163,7 +164,7 @@ const chainLoading = ref(false)
 const chainQuery = reactive({
   pageNum: 1,
   pageSize: 10,
-  txHash: undefined
+  txHash: ''
 })
 
 const batteryOptions = ref([])
@@ -239,16 +240,19 @@ const getChainTxList = () => {
 
 const handleTxFilter = () => {
   chainQuery.pageNum = 1
+  const trimmed = String(chainQuery.txHash || '').trim()
+  chainQuery.txHash = trimmed
   const query = { ...route.query }
-  if (chainQuery.txHash) query.txHash = chainQuery.txHash
+  if (trimmed) query.txHash = trimmed
   else delete query.txHash
   delete query.batteryId
   router.replace({ name: route.name, query })
 
-  if (!chainQuery.txHash) {
+  if (!trimmed) {
     txBatteryId.value = ''
     txTraceEvents.value = []
   }
+  getChainTxList()
 }
 
 const formatJson = (jsonStr) => {
@@ -627,7 +631,7 @@ const txChartEvents = computed(() => {
   return []
 })
 
-const buildTraceEvents = ({ transfers, sales, maintenance, recycling }) => {
+const buildTraceEvents = ({ transfers, sales, maintenance, recycling, vehicleBindings, bindTxHashByVin }) => {
   const events = []
 
     ; (transfers || []).forEach(r => {
@@ -684,6 +688,23 @@ const buildTraceEvents = ({ transfers, sales, maintenance, recycling }) => {
       })
     })
 
+    ; (vehicleBindings || []).forEach(r => {
+      const time = parseToDate(r.bindTime)
+      const vin = String(r.vin || '').trim()
+      const vinKey = vin ? vin.toUpperCase() : ''
+      const txHash = (bindTxHashByVin && vinKey) ? (bindTxHashByVin.get(vinKey) || '') : ''
+      const ownerId = r.ownerId != null ? String(r.ownerId) : '-'
+      const content = `VIN：${vin || '-'}，品牌：${r.brand || '-'}，型号：${r.model || '-'}，车主ID：${ownerId}`
+      events.push({
+        time,
+        timeText: time ? formatDateTime(time) : '',
+        typeText: '车电绑定',
+        typeTag: 'info',
+        content,
+        txHash
+      })
+    })
+
   events.sort(sortByTimeAsc)
   return events
 }
@@ -697,23 +718,43 @@ const fetchTraceEventsByBatteryId = (batteryId) => {
     getTransferList({ pageNum: 1, pageSize: 1000, batteryId: id }),
     getSalesList({ pageNum: 1, pageSize: 1000, batteryId: id }),
     getMaintenanceList({ pageNum: 1, pageSize: 1000, batteryId: id }),
-    getRecyclingList({ pageNum: 1, pageSize: 1000, batteryId: id })
-  ]).then(([tRes, sRes, mRes, rRes]) => {
+    getRecyclingList({ pageNum: 1, pageSize: 1000, batteryId: id }),
+    getVehicleList({ pageNum: 1, pageSize: 1000, batteryId: id }),
+    getChainList({ pageNum: 1, pageSize: 1000, methodName: 'bindVehicle', batteryId: id })
+  ]).then(([tRes, sRes, mRes, rRes, vRes, cRes]) => {
     const tOk = tRes?.status === 'fulfilled' ? tRes.value : null
     const sOk = sRes?.status === 'fulfilled' ? sRes.value : null
     const mOk = mRes?.status === 'fulfilled' ? mRes.value : null
     const rOk = rRes?.status === 'fulfilled' ? rRes.value : null
+    const vOk = vRes?.status === 'fulfilled' ? vRes.value : null
+    const cOk = cRes?.status === 'fulfilled' ? cRes.value : null
 
     const tPage = tOk?.data || tOk
     const sPage = sOk?.data || sOk
     const mPage = mOk?.data || mOk
     const rPage = rOk?.data || rOk
+    const vPage = vOk?.data || vOk
+    const cPage = cOk?.data || cOk
+
+    const bindTxHashByVin = new Map()
+      ; (cPage?.records || []).forEach(row => {
+        if (!row) return
+        const root = parseJson(row?.params)
+        const vin = String(root?.vin || '').trim()
+        if (!vin) return
+        const key = vin.toUpperCase()
+        if (!bindTxHashByVin.has(key)) {
+          bindTxHashByVin.set(key, String(row.txHash || ''))
+        }
+      })
 
     return buildTraceEvents({
       transfers: tPage?.records || [],
       sales: sPage?.records || [],
       maintenance: mPage?.records || [],
-      recycling: rPage?.records || []
+      recycling: rPage?.records || [],
+      vehicleBindings: vPage?.records || [],
+      bindTxHashByVin
     })
   }).catch(() => [])
 }
@@ -830,7 +871,7 @@ onMounted(async () => {
     batteryQuery.batteryIdInput = String(route.query.batteryId || '')
   } else if (route.query?.txHash) {
     activeTab.value = 'tx'
-    chainQuery.txHash = route.query.txHash
+    chainQuery.txHash = String(route.query.txHash || '')
   }
   await loadBatteryOptions()
   if (activeTab.value === 'tx') {
@@ -839,12 +880,6 @@ onMounted(async () => {
     const id = resolveBatteryId()
     if (id) {
       fetchTraceByBatteryId(id)
-    } else {
-      const first = String(batteryOptions.value?.[0]?.batteryId || '').trim()
-      if (first) {
-        batteryQuery.batteryIdInput = first
-        fetchTraceByBatteryId(first)
-      }
     }
   }
 })

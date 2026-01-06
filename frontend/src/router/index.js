@@ -139,7 +139,7 @@ export const asyncRoutes = [
             path: 'material-preview',
             name: 'SalesMaterialPreview',
             component: () => import('@/views/battery/sales/material-preview.vue'),
-            meta: { title: '材料预览', icon: 'View', roles: ['admin', 'sales', 'dealer'], activeMenu: '/battery/sales/list' },
+            meta: { title: '材料预览', icon: 'View', roles: ['admin', 'sales', 'dealer', 'maintainer', 'maintenance'], activeMenu: '/battery/sales/list' },
             hidden: true
           },
           {
@@ -178,13 +178,13 @@ export const asyncRoutes = [
     component: Layout,
     redirect: '/maintenance/record',
     name: 'MaintenanceManage',
-    meta: { title: '售后服务', icon: 'FirstAidKit', roles: ['admin', 'maintenance'] },
+    meta: { title: '售后服务', icon: 'FirstAidKit', roles: ['admin', 'maintainer', 'maintenance'] },
     children: [
       {
         path: 'record',
         name: 'MaintenanceRecord',
         component: () => import('@/views/maintenance/record/index.vue'),
-        meta: { title: '售后工单', icon: 'Document', roles: ['admin', 'maintenance'] }
+        meta: { title: '售后工单', icon: 'Document', roles: ['admin', 'maintainer', 'maintenance'] }
       }
     ]
   },

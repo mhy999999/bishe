@@ -80,7 +80,7 @@
         <el-table-column label="上链哈希" align="center" width="200">
           <template #default="{ row }">
             <el-tooltip :content="row.dataHash" placement="top" effect="light">
-              <el-link type="primary" :underline="false">{{ row.dataHash ? row.dataHash.substring(0, 10) + '...' : '未上链'
+              <el-link type="primary" underline="never">{{ row.dataHash ? row.dataHash.substring(0, 10) + '...' : '未上链'
                 }}</el-link>
             </el-tooltip>
           </template>

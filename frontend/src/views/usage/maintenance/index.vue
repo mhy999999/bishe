@@ -24,7 +24,7 @@
       <el-table-column label="维修凭证(TxHash)" align="center" width="200">
         <template #default="{ row }">
           <el-tooltip :content="row.txHash" placement="top" effect="light">
-            <el-link type="primary" :underline="false">{{ row.txHash ? row.txHash.substring(0, 10) + '...' : '未上链'
+            <el-link type="primary" underline="never">{{ row.txHash ? row.txHash.substring(0, 10) + '...' : '未上链'
               }}</el-link>
           </el-tooltip>
         </template>

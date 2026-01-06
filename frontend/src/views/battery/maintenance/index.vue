@@ -31,7 +31,7 @@
         <template #default="{ row }">
           <template v-if="parseMaterialUrls(row?.issueMaterialUrl).length > 0">
             <el-link v-for="(url, idx) in parseMaterialUrls(row?.issueMaterialUrl)" :key="url" type="primary"
-              :underline="false" style="margin: 0 6px;" @click="openMaterialPreview(url)">
+              underline="never" style="margin: 0 6px;" @click="openMaterialPreview(url)">
               文件{{ idx + 1 }}
             </el-link>
           </template>
@@ -42,7 +42,7 @@
         <template #default="{ row }">
           <template v-if="parseMaterialUrls(row?.completionMaterialUrl).length > 0">
             <el-link v-for="(url, idx) in parseMaterialUrls(row?.completionMaterialUrl)" :key="url" type="primary"
-              :underline="false" style="margin: 0 6px;" @click="openMaterialPreview(url)">
+              underline="never" style="margin: 0 6px;" @click="openMaterialPreview(url)">
               文件{{ idx + 1 }}
             </el-link>
           </template>

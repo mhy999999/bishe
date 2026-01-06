@@ -32,7 +32,7 @@
         <template #default="{ row }">
           <template v-if="row.txHash">
             <el-tooltip :content="row.txHash" placement="top" effect="light">
-              <el-link type="primary" :underline="false" @click.stop="openTxHash(row.txHash)">
+              <el-link type="primary" underline="never" @click.stop="openTxHash(row.txHash)">
                 {{ row.txHash.substring(0, 10) + '...' }}
               </el-link>
             </el-tooltip>
@@ -53,7 +53,7 @@
         <template #default="{ row }">
           <div v-if="parseMaterialUrls(row.materialUrl).length">
             <el-link v-for="(url, idx) in parseMaterialUrls(row.materialUrl)" :key="url + idx"
-              @click.stop="openMaterialPreview(url)" type="primary" :underline="false" style="margin-right: 8px;">
+              @click.stop="openMaterialPreview(url)" type="primary" underline="never" style="margin-right: 8px;">
               文件{{ idx + 1 }}
             </el-link>
           </div>
@@ -113,16 +113,51 @@
       </template>
     </el-dialog>
 
+    <el-dialog title="车电绑定" v-model="bindDialogVisible" width="560px">
+      <el-form ref="bindForm" :model="bindTemp" :rules="bindRules" label-width="110px">
+        <el-form-item label="VIN码" prop="vin">
+          <el-input v-model="bindTemp.vin" placeholder="请输入 17 位 VIN（自动转大写）" clearable maxlength="17" show-word-limit
+            @update:modelValue="handleBindVinChange" />
+        </el-form-item>
+        <el-form-item label="电池ID" prop="batteryId">
+          <el-input v-model="bindTemp.batteryId" disabled />
+        </el-form-item>
+        <el-form-item label="品牌" prop="brand">
+          <el-input v-model="bindTemp.brand" placeholder="请输入车辆品牌" clearable />
+        </el-form-item>
+        <el-form-item label="型号" prop="model">
+          <el-input v-model="bindTemp.model" placeholder="请输入车型/型号" clearable />
+        </el-form-item>
+        <el-form-item label="车牌号">
+          <el-input v-model="bindTemp.plateNo" placeholder="可选" clearable />
+        </el-form-item>
+        <el-form-item label="车主ID" prop="ownerId">
+          <el-input v-model="bindTemp.ownerId" placeholder="默认当前账号ID，可修改" clearable />
+        </el-form-item>
+      </el-form>
+      <div style="margin-left: 50px; color: #909399; font-size: 12px; margin-bottom: 12px;">
+        绑定操作将触发 bindVehicle 上链交易。
+      </div>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button :disabled="bindSubmitting" @click="bindDialogVisible = false">取消</el-button>
+          <el-button type="primary" :loading="bindSubmitting" @click="submitBind">确认绑定</el-button>
+        </div>
+      </template>
+    </el-dialog>
+
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { getSalesList, saveSales, updateSales, getBatteryList, uploadSalesMaterial, cancelSales } from '@/api/battery'
+import { saveVehicle } from '@/api/trace'
 import Pagination from '@/components/Pagination/index.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/store/user'
 import { useRouter, useRoute } from 'vue-router'
+import { getToken } from '@/utils/auth'
 
 const dataForm = ref()
 const userStore = useUserStore()
@@ -163,6 +198,18 @@ const batteryLoading = ref(false)
 
 const materialFileList = ref([])
 const materialUrls = ref([])
+
+const bindDialogVisible = ref(false)
+const bindForm = ref()
+const bindSubmitting = ref(false)
+const bindTemp = reactive({
+  vin: '',
+  batteryId: '',
+  brand: '',
+  model: '',
+  plateNo: '',
+  ownerId: ''
+})
 
 const rules = {
   batteryId: [{ required: true, message: '电池ID必填', trigger: 'change' }],
@@ -218,6 +265,79 @@ const parseMaterialUrls = (raw) => {
     return text.split(',').map(s => s.trim()).filter(Boolean)
   }
   return [text]
+}
+
+const normalizeVin = (raw) => {
+  const s = String(raw ?? '')
+  return s.replace(/\s+/g, '').replace(/-/g, '').toUpperCase().slice(0, 17)
+}
+
+const getCurrentUserIdFromToken = () => {
+  const token = getToken()
+  if (!token) return ''
+  const parts = String(token).split('.')
+  if (parts.length < 2) return ''
+  try {
+    let payload = parts[1]
+    payload = payload.replace(/-/g, '+').replace(/_/g, '/')
+    payload = payload + '='.repeat((4 - (payload.length % 4)) % 4)
+    const json = JSON.parse(atob(payload))
+    return json?.userId != null ? String(json.userId) : ''
+  } catch {
+    return ''
+  }
+}
+
+const validateVin = (rule, value, callback) => {
+  const vin = normalizeVin(value)
+  if (!vin) {
+    callback(new Error('VIN必填'))
+    return
+  }
+  if (vin.length !== 17) {
+    callback(new Error('VIN长度应为17位'))
+    return
+  }
+  if (!/^[A-HJ-NPR-Z0-9]{17}$/.test(vin)) {
+    callback(new Error('VIN格式不正确'))
+    return
+  }
+  callback()
+}
+
+const validateOwnerId = (rule, value, callback) => {
+  const s = String(value ?? '').trim()
+  if (!s) {
+    callback(new Error('车主ID必填'))
+    return
+  }
+  if (!/^\d+$/.test(s)) {
+    callback(new Error('车主ID必须为数字'))
+    return
+  }
+  callback()
+}
+
+const bindRules = {
+  vin: [{ trigger: 'blur', validator: validateVin }],
+  batteryId: [{ required: true, message: '电池ID必填', trigger: 'blur' }],
+  brand: [{ required: true, message: '品牌必填', trigger: 'blur' }],
+  model: [{ required: true, message: '型号必填', trigger: 'blur' }],
+  ownerId: [{ trigger: 'blur', validator: validateOwnerId }]
+}
+
+const handleBindVinChange = (val) => {
+  const next = normalizeVin(val)
+  if (next !== bindTemp.vin) bindTemp.vin = next
+}
+
+const resetBindTemp = (batteryId) => {
+  bindTemp.vin = ''
+  bindTemp.batteryId = String(batteryId || '').trim()
+  bindTemp.brand = ''
+  bindTemp.model = ''
+  bindTemp.plateNo = ''
+  bindTemp.ownerId = getCurrentUserIdFromToken()
 }
 
 const openMaterialPreview = (rawUrl) => {
@@ -344,7 +464,54 @@ const handleCancel = (row) => {
 const handleBinding = (row) => {
   const batteryId = row?.batteryId
   if (!batteryId) return
-  router.push({ name: 'VehicleBinding', query: { batteryId: String(batteryId), action: 'create' } })
+  resetBindTemp(batteryId)
+  bindDialogVisible.value = true
+}
+
+const submitBind = () => {
+  if (!bindForm.value || bindSubmitting.value) return
+  bindTemp.vin = normalizeVin(bindTemp.vin)
+  bindForm.value.validate((valid) => {
+    if (!valid) return
+    const vin = bindTemp.vin
+    const batteryId = String(bindTemp.batteryId || '').trim()
+    if (!vin || !batteryId) return
+
+    const brand = String(bindTemp.brand || '').trim()
+    const model = String(bindTemp.model || '').trim()
+    const plateNo = String(bindTemp.plateNo || '').trim()
+    const ownerIdStr = String(bindTemp.ownerId || '').trim()
+    const ownerId = Number(ownerIdStr)
+    if (!brand || !model || !ownerIdStr || Number.isNaN(ownerId)) return
+
+    ElMessageBox.confirm(
+      `确认将电池 ${batteryId} 绑定到 VIN ${vin} 吗？该操作会触发上链交易。`,
+      '确认绑定',
+      {
+        confirmButtonText: '确认',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    ).then(() => {
+      bindSubmitting.value = true
+      saveVehicle({
+        vin,
+        batteryId,
+        brand,
+        model,
+        plateNo: plateNo || undefined,
+        ownerId
+      }).then(() => {
+        bindDialogVisible.value = false
+        ElMessage.success('绑定成功')
+        router.push({ name: 'VehicleBinding', query: { vin } })
+      }).catch((err) => {
+        console.error(err)
+      }).finally(() => {
+        bindSubmitting.value = false
+      })
+    }).catch(() => { })
+  })
 }
 
 const initFromRoute = async () => {
