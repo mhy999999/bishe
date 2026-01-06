@@ -85,7 +85,7 @@ import { ElMessage } from 'element-plus'
 import { InfoFilled } from '@element-plus/icons-vue'
 import { useRoute } from 'vue-router'
 
-const list = ref(null)
+const list = ref([])
 const total = ref(0)
 const listLoading = ref(true)
 const route = useRoute()
@@ -112,16 +112,13 @@ const rules = {
 const getList = () => {
   listLoading.value = true
   getTransferList(listQuery).then(response => {
-    if (response.data) {
-      list.value = response.data.records
-      total.value = response.data.total
-    } else {
-      list.value = []
-      total.value = 0
-    }
+    const pageData = response?.data || response
+    list.value = pageData?.records || []
+    total.value = pageData?.total || 0
     listLoading.value = false
-  }).catch(err => {
-    console.error(err)
+  }).catch(() => {
+    list.value = []
+    total.value = 0
     listLoading.value = false
   })
 }
