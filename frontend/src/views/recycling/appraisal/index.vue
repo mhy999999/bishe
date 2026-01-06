@@ -165,7 +165,18 @@
             </div>
           </template>
 
-          <el-form :inline="true" :model="confirmForm" label-width="90px">
+          <el-form :inline="true" :model="valuationForm" label-width="90px">
+            <el-form-item label="预估价">
+              <el-input v-model="valuationForm.preliminaryValue" style="width: 200px;" readonly>
+                <template #append>元</template>
+              </el-input>
+            </el-form-item>
+            <el-form-item>
+              <el-button :loading="autoCalcLoading" @click="autoFillPreliminary">自动计算</el-button>
+            </el-form-item>
+          </el-form>
+
+          <el-form :inline="true" :model="confirmForm" label-width="90px" style="margin-top: 6px;">
             <el-form-item label="最终回收价">
               <el-input v-model="confirmForm.finalValue" style="width: 200px;" placeholder="请输入金额">
                 <template #append>元</template>
@@ -176,62 +187,6 @@
             </el-form-item>
           </el-form>
 
-          <div style="margin-top: 8px;">
-            <el-descriptions :column="1" border>
-              <el-descriptions-item label="估值依据">
-                <div class="valuation-basis">
-                  <div v-if="!activeValuationBasisText" class="valuation-basis__empty">-</div>
-                  <template v-else>
-                    <div class="valuation-basis__meta">
-                      <el-tag v-if="activeValuationBasisInfo.model" size="small" type="info" effect="plain">
-                        模型：{{ activeValuationBasisInfo.model }}
-                      </el-tag>
-                      <el-tag v-if="activeValuationBasisInfo.samples != null" size="small" type="success"
-                        effect="plain">
-                        样本：{{ activeValuationBasisInfo.samples }}
-                      </el-tag>
-                      <el-tag v-if="activeValuationBasisInfo.featuresCount" size="small" type="warning" effect="plain">
-                        特征：{{ activeValuationBasisInfo.featuresCount }}项
-                      </el-tag>
-                      <el-button text size="small" @click="valuationBasisExpanded = !valuationBasisExpanded">
-                        {{ valuationBasisExpanded ? '收起详情' : '展开详情' }}
-                      </el-button>
-                    </div>
-
-                    <div v-if="activeValuationBasisInfo.previewFeatures.length" class="valuation-basis__features">
-                      <div class="valuation-basis__label">使用特征</div>
-                      <div class="valuation-basis__tags">
-                        <el-tag v-for="f in activeValuationBasisInfo.previewFeatures" :key="f" size="small"
-                          effect="plain">
-                          {{ humanizeFeatureName(f) }}
-                        </el-tag>
-                        <span v-if="activeValuationBasisInfo.moreFeaturesCount" class="valuation-basis__more">
-                          +{{ activeValuationBasisInfo.moreFeaturesCount }}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div v-if="activeValuationBasisInfo.metrics.length" class="valuation-basis__features">
-                      <div class="valuation-basis__label">关键数值</div>
-                      <div class="valuation-basis__tags">
-                        <el-tag v-for="m in activeValuationBasisInfo.metrics" :key="m.key" size="small" type="info"
-                          effect="plain">
-                          {{ m.label }}：{{ m.value }}
-                        </el-tag>
-                      </div>
-                      <div v-if="activeValuationBasisInfo.formula" class="valuation-basis__formula">
-                        公式：{{ activeValuationBasisInfo.formula }}
-                      </div>
-                    </div>
-
-                    <div v-if="valuationBasisExpanded" class="valuation-basis__raw">
-                      <pre class="valuation-basis__pre">{{ activeValuationBasisText }}</pre>
-                    </div>
-                  </template>
-                </div>
-              </el-descriptions-item>
-            </el-descriptions>
-          </div>
         </el-card>
       </div>
 
@@ -252,56 +207,6 @@
         <el-descriptions-item label="审核时间">{{ formatDateTime(receiptData?.auditTime) }}</el-descriptions-item>
         <el-descriptions-item label="审核意见" :span="2">
           <span style="white-space: pre-wrap;">{{ receiptData?.auditOpinion || '-' }}</span>
-        </el-descriptions-item>
-        <el-descriptions-item label="估值依据" :span="2">
-          <div class="valuation-basis">
-            <div v-if="!receiptValuationBasisText" class="valuation-basis__empty">-</div>
-            <template v-else>
-              <div class="valuation-basis__meta">
-                <el-tag v-if="receiptValuationBasisInfo.model" size="small" type="info" effect="plain">
-                  模型：{{ receiptValuationBasisInfo.model }}
-                </el-tag>
-                <el-tag v-if="receiptValuationBasisInfo.samples != null" size="small" type="success" effect="plain">
-                  样本：{{ receiptValuationBasisInfo.samples }}
-                </el-tag>
-                <el-tag v-if="receiptValuationBasisInfo.featuresCount" size="small" type="warning" effect="plain">
-                  特征：{{ receiptValuationBasisInfo.featuresCount }}项
-                </el-tag>
-                <el-button text size="small" @click="receiptBasisExpanded = !receiptBasisExpanded">
-                  {{ receiptBasisExpanded ? '收起详情' : '展开详情' }}
-                </el-button>
-              </div>
-
-              <div v-if="receiptValuationBasisInfo.previewFeatures.length" class="valuation-basis__features">
-                <div class="valuation-basis__label">使用特征</div>
-                <div class="valuation-basis__tags">
-                  <el-tag v-for="f in receiptValuationBasisInfo.previewFeatures" :key="f" size="small" effect="plain">
-                    {{ humanizeFeatureName(f) }}
-                  </el-tag>
-                  <span v-if="receiptValuationBasisInfo.moreFeaturesCount" class="valuation-basis__more">
-                    +{{ receiptValuationBasisInfo.moreFeaturesCount }}
-                  </span>
-                </div>
-              </div>
-
-              <div v-if="receiptValuationBasisInfo.metrics.length" class="valuation-basis__features">
-                <div class="valuation-basis__label">关键数值</div>
-                <div class="valuation-basis__tags">
-                  <el-tag v-for="m in receiptValuationBasisInfo.metrics" :key="m.key" size="small" type="info"
-                    effect="plain">
-                    {{ m.label }}：{{ m.value }}
-                  </el-tag>
-                </div>
-                <div v-if="receiptValuationBasisInfo.formula" class="valuation-basis__formula">
-                  公式：{{ receiptValuationBasisInfo.formula }}
-                </div>
-              </div>
-
-              <div v-if="receiptBasisExpanded" class="valuation-basis__raw">
-                <pre class="valuation-basis__pre">{{ receiptValuationBasisText }}</pre>
-              </div>
-            </template>
-          </div>
         </el-descriptions-item>
         <el-descriptions-item label="上链哈希" :span="2">
           <template v-if="receiptData?.receiptHash">
@@ -415,31 +320,18 @@
             <div v-if="!detailValuationBasisText" class="valuation-basis__empty">-</div>
             <template v-else>
               <div class="valuation-basis__meta">
-                <el-tag v-if="detailValuationBasisInfo.model" size="small" type="info" effect="plain">
-                  模型：{{ detailValuationBasisInfo.model }}
-                </el-tag>
-                <el-tag v-if="detailValuationBasisInfo.samples != null" size="small" type="success" effect="plain">
-                  样本：{{ detailValuationBasisInfo.samples }}
-                </el-tag>
-                <el-tag v-if="detailValuationBasisInfo.featuresCount" size="small" type="warning" effect="plain">
-                  特征：{{ detailValuationBasisInfo.featuresCount }}项
+                <el-tag size="small" :type="detailValuationBasisInfo.kind === 'legacy' ? 'warning' : 'info'"
+                  effect="plain">
+                  {{ detailValuationBasisInfo.kind === 'legacy' ? '历史估值记录' : (detailValuationBasisInfo.kind ===
+                    'manual_auto' ? '系统建议' : '人工估值') }}
                 </el-tag>
                 <el-button text size="small" @click="detailBasisExpanded = !detailBasisExpanded">
                   {{ detailBasisExpanded ? '收起详情' : '展开详情' }}
                 </el-button>
               </div>
 
-              <div v-if="detailValuationBasisInfo.previewFeatures.length" class="valuation-basis__features">
-                <div class="valuation-basis__label">使用特征</div>
-                <div class="valuation-basis__tags">
-                  <el-tag v-for="f in detailValuationBasisInfo.previewFeatures" :key="f" size="small" effect="plain">
-                    {{ humanizeFeatureName(f) }}
-                  </el-tag>
-                  <span v-if="detailValuationBasisInfo.moreFeaturesCount" class="valuation-basis__more">
-                    +{{ detailValuationBasisInfo.moreFeaturesCount }}
-                  </span>
-                </div>
-              </div>
+              <el-alert v-if="detailValuationBasisInfo.kind === 'legacy'" type="warning" show-icon :closable="false"
+                title="该条估值依据为旧格式，已做兼容展示" />
 
               <div v-if="detailValuationBasisInfo.metrics.length" class="valuation-basis__features">
                 <div class="valuation-basis__label">关键数值</div>
@@ -455,7 +347,24 @@
               </div>
 
               <div v-if="detailBasisExpanded" class="valuation-basis__raw">
-                <pre class="valuation-basis__pre">{{ detailValuationBasisText }}</pre>
+                <el-descriptions v-if="detailValuationBasisInfo.pairsPreview.length" :column="2" border size="small">
+                  <el-descriptions-item v-for="p in detailValuationBasisInfo.pairsPreview" :key="p.key"
+                    :label="p.label">
+                    {{ p.value }}
+                  </el-descriptions-item>
+                </el-descriptions>
+                <div v-if="detailValuationBasisInfo.morePairsCount" class="valuation-basis__more">
+                  还有 {{ detailValuationBasisInfo.morePairsCount }} 项未展示
+                </div>
+                <div class="valuation-basis__raw-actions">
+                  <el-button text size="small" @click="basisRawVisible.detail = !basisRawVisible.detail">
+                    {{ basisRawVisible.detail ? '隐藏原始文本' : '查看原始文本' }}
+                  </el-button>
+                  <el-button text size="small" @click="copyText(detailValuationBasisText)">复制原文</el-button>
+                </div>
+                <div v-if="basisRawVisible.detail" class="valuation-basis__rawbox">
+                  <pre class="valuation-basis__pre">{{ detailValuationBasisText }}</pre>
+                </div>
               </div>
             </template>
           </div>
@@ -519,7 +428,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import Pagination from '@/components/Pagination/index.vue'
 import { useUserStore } from '@/store/user'
-import { applyRecycling, auditRecycling, confirmRecyclingPrice, getChainList, getRecyclingList, getRecyclingReceipt, uploadRecyclingPhoto, uploadRecyclingReport } from '@/api/trace'
+import { applyRecycling, auditRecycling, calcRecyclingValuation, confirmRecyclingPrice, getChainList, getMaintenanceList, getRecyclingList, getRecyclingReceipt, getTransferList, uploadRecyclingPhoto, uploadRecyclingReport } from '@/api/trace'
+import { getBatteryList } from '@/api/battery'
 
 const route = useRoute()
 const router = useRouter()
@@ -632,8 +542,6 @@ const submitApply = () => {
       applyDialogVisible.value = false
       ElMessage.success('回收申请已提交')
       getList()
-    }).catch((err) => {
-      console.error(err)
     }).finally(() => {
       applySubmitting.value = false
     })
@@ -667,8 +575,6 @@ const submitAudit = () => {
     auditDialogVisible.value = false
     ElMessage.success('审核完成')
     getList()
-  }).catch((err) => {
-    console.error(err)
   }).finally(() => {
     auditSubmitting.value = false
   })
@@ -684,10 +590,21 @@ const openDetail = (row) => {
 const valuationBasisExpanded = ref(false)
 const receiptBasisExpanded = ref(false)
 const detailBasisExpanded = ref(false)
+const basisRawVisible = reactive({
+  active: false,
+  receipt: false,
+  detail: false
+})
 
 const valuationDialogVisible = ref(false)
 const receiptDialogVisible = ref(false)
 const receiptData = ref(null)
+const valuationSubmitting = ref(false)
+const autoCalcLoading = ref(false)
+const valuationForm = reactive({
+  preliminaryValue: '',
+  valuationBasis: ''
+})
 const confirmSubmitting = ref(false)
 const confirmForm = reactive({
   finalValue: ''
@@ -755,31 +672,95 @@ const photoPreviewUrls = computed(() => parseStringList(activeRow.value?.photoUr
 const openValuationDialog = (row) => {
   activeRow.value = row || null
   confirmForm.finalValue = row?.finalValue != null ? String(row.finalValue) : ''
+  valuationForm.preliminaryValue = row?.preliminaryValue != null ? String(row.preliminaryValue) : ''
+  valuationForm.valuationBasis = String(row?.valuationBasis || '').trim()
   valuationDialogVisible.value = true
 }
 
 watch(valuationDialogVisible, (val) => {
   if (!val) {
     confirmForm.finalValue = ''
+    valuationForm.preliminaryValue = ''
+    valuationForm.valuationBasis = ''
     valuationBasisExpanded.value = false
+    basisRawVisible.active = false
   }
 })
 
 watch(receiptDialogVisible, (val) => {
   if (!val) {
     receiptBasisExpanded.value = false
+    basisRawVisible.receipt = false
   }
 })
 
 watch(detailVisible, (val) => {
   if (!val) {
     detailBasisExpanded.value = false
+    basisRawVisible.detail = false
   }
 })
 
 function normalizeValuationBasis(raw) {
   const text = String(raw || '').trim()
   return text
+}
+
+function parseBasisPairs(text) {
+  const input = String(text || '')
+  const out = []
+  const re = /(^|[;,])\s*([a-zA-Z_][a-zA-Z0-9_\.]*)\s*=\s*([^,;]+)\s*/g
+  let m
+  while ((m = re.exec(input)) !== null) {
+    const key = String(m[2] || '').trim()
+    const value = String(m[3] || '').trim()
+    if (!key || !value) continue
+    out.push({ key, value })
+  }
+  return out
+}
+
+function normalizeBasisKey(rawKey) {
+  const k = String(rawKey || '').trim()
+  if (!k) return ''
+  if (k.startsWith('chain.')) return k
+  if (k.startsWith('chain') && k.length > 5) {
+    const rest = k.slice(5)
+    const normalized = rest.charAt(0).toLowerCase() + rest.slice(1)
+    return `chain.${normalized}`
+  }
+  return k
+}
+
+function labelBasisKey(key) {
+  const k0 = String(key || '').trim()
+  const k = normalizeBasisKey(k0)
+  const map = {
+    capacity: '容量(kWh)',
+    voltage: '电压(V)',
+    capacityVoltage: '容量×电压',
+    maintenanceCount: '维修次数',
+    transferCount: '流转次数',
+    batteryStatus: '状态码',
+    unitPricePerKwh: '单价(元/kWh)',
+    statusFactor: '状态系数',
+    maintenanceFactor: '维修系数',
+    transferFactor: '流转系数',
+    suggestedPreliminary: '预估价(建议)',
+    'chain.transferCount': '流转次数(链)',
+    'chain.maintenanceCount': '维修次数(链)',
+    'chain.qualityInspectionCount': '质检次数(链)',
+    'chain.salesCount': '销售次数(链)',
+    'chain.lastTransferDays': '距上次流转(天)',
+    'chain.lastMaintenanceDays': '距上次维修(天)',
+    'chain.lastQualityInspectionDays': '距上次质检(天)',
+    'chain.latestOcv': '最新开路电压(OCV)',
+    'chain.latestAcr': '最新内阻(ACR)',
+    'chain.latestInsulationRes': '最新绝缘电阻',
+    'chain.latestAirTightnessOk': '最新气密性(合格)'
+  }
+  if (map[k]) return map[k]
+  return k0 || k
 }
 
 function extractKeyValue(text, key) {
@@ -803,38 +784,11 @@ function extractFormula(text) {
   return candidate
 }
 
-function extractFeatures(text) {
-  if (!text) return []
-  const m = text.match(/features\s*=\s*\[([\s\S]*?)\]/i) || text.match(/features\s*:\s*\[([\s\S]*?)\]/i)
-  if (!m || !m[1]) return []
-  return String(m[1])
-    .split(',')
-    .map(s => s.trim())
-    .filter(Boolean)
-}
-
-function extractSamples(text) {
-  if (!text) return null
-  const m = text.match(/samples\s*=\s*([0-9]+)/i) || text.match(/samples\s*:\s*([0-9]+)/i)
-  if (!m || !m[1]) return null
-  const n = Number(m[1])
-  return Number.isFinite(n) ? n : null
-}
-
-function extractModel(text) {
-  if (!text) return ''
-  const head = text.split(';')[0] || ''
-  const h = head.trim()
-  if (!h) return ''
-  if (h.includes('=') || h.includes(':')) return ''
-  return h
-}
-
 function buildValuationBasisInfo(raw) {
   const text = normalizeValuationBasis(raw)
-  const features = extractFeatures(text)
-  const samples = extractSamples(text)
-  const model = extractModel(text)
+  const head = (String(text).split(';')[0] || '').trim().toLowerCase()
+  const legacy = head.startsWith('ai_') || /\bfeatures\s*=\s*\[/i.test(text) || /\bsamples\s*=\s*\d+/i.test(text)
+  const kind = legacy ? 'legacy' : (head === 'manual_auto' ? 'manual_auto' : (head ? head : 'manual'))
   const formula = extractFormula(text)
   const capacity = extractKeyValue(text, 'capacity')
   const voltage = extractKeyValue(text, 'voltage')
@@ -848,27 +802,67 @@ function buildValuationBasisInfo(raw) {
     { key: 'maintenanceCount', label: '维修次数', value: maintenanceCount },
     { key: 'batteryStatus', label: '状态码', value: batteryStatus }
   ].filter(m => String(m.value || '').trim())
-  const previewLimit = 16
-  const previewFeatures = features.slice(0, previewLimit)
-  const moreFeaturesCount = Math.max(0, features.length - previewFeatures.length)
+  const ignoredKeys = new Set(['features', 'samples'])
+  const pairsAll = parseBasisPairs(text)
+    .map(p => ({ key: normalizeBasisKey(p.key), rawKey: p.key, value: p.value }))
+    .filter(p => !ignoredKeys.has(String(p.rawKey || '').trim()))
+
+  const dedup = new Map()
+  for (const p of pairsAll) {
+    const k = String(p.key || '').trim()
+    if (!k || dedup.has(k)) continue
+    dedup.set(k, p)
+  }
+  const pairs = Array.from(dedup.values())
+    .map(p => ({ key: p.key || p.rawKey, label: labelBasisKey(p.key || p.rawKey), value: p.value }))
+  const pairsPreviewLimit = 12
+  const pairsPreview = pairs.slice(0, pairsPreviewLimit)
+  const morePairsCount = Math.max(0, pairs.length - pairsPreview.length)
   return {
-    model,
-    samples,
-    featuresCount: features.length,
-    previewFeatures,
-    moreFeaturesCount,
+    kind,
     metrics,
-    formula
+    formula,
+    pairsPreview,
+    morePairsCount
   }
 }
 
-function humanizeFeatureName(raw) {
-  const t = String(raw || '').trim()
-  if (!t) return '-'
-  const dot = t.replaceAll('.', ' · ')
-  const snake = dot.replaceAll('_', ' ')
-  const camel = snake.replace(/([a-z])([A-Z])/g, '$1 $2')
-  return camel
+const copyText = async (text) => {
+  const t = String(text || '')
+  if (!t.trim()) {
+    ElMessage.warning('没有可复制内容')
+    return
+  }
+  try {
+    await navigator.clipboard.writeText(t)
+    ElMessage.success('已复制')
+  } catch (e) {
+    ElMessage.warning('复制失败，请手动选中复制')
+  }
+}
+
+const autoFillPreliminary = async () => {
+  const batteryId = String(activeRow.value?.batteryId || '').trim()
+  if (!activeRow.value?.appraisalId || !batteryId) return
+  if (autoCalcLoading.value) return
+
+  autoCalcLoading.value = true
+  try {
+    const res = await calcRecyclingValuation({
+      appraisalId: activeRow.value.appraisalId
+    })
+    const row = res?.data || res
+    if (row) {
+      activeRow.value = row
+      valuationForm.preliminaryValue = row?.preliminaryValue != null ? String(row.preliminaryValue) : ''
+    }
+    ElMessage.success('已自动计算预估价')
+    getList()
+  } catch (e) {
+    ElMessage.warning(e?.message || '自动计算失败')
+  } finally {
+    autoCalcLoading.value = false
+  }
 }
 
 const activeValuationBasisText = computed(() => normalizeValuationBasis(activeRow.value?.valuationBasis))
@@ -924,7 +918,6 @@ const handlePhotoUpload = (options) => {
     ElMessage.success('上传成功')
     options.onSuccess && options.onSuccess(url)
   }).catch((err) => {
-    console.error(err)
     options.onError && options.onError(err)
   })
 }
@@ -943,13 +936,16 @@ const handleReportUpload = (options) => {
     ElMessage.success('上传成功')
     options.onSuccess && options.onSuccess(url)
   }).catch((err) => {
-    console.error(err)
     options.onError && options.onError(err)
   })
 }
 
 const confirmPrice = () => {
   if (!activeRow.value?.appraisalId) return
+  if (activeRow.value?.preliminaryValue == null) {
+    ElMessage.warning('请先保存预估价')
+    return
+  }
   const finalValue = Number(String(confirmForm.finalValue || '').trim())
   if (!Number.isFinite(finalValue) || finalValue <= 0) {
     ElMessage.warning('最终回收价必须大于0')
@@ -960,8 +956,6 @@ const confirmPrice = () => {
     ElMessage.success('已确认价格并完成回收')
     valuationDialogVisible.value = false
     getList()
-  }).catch((err) => {
-    console.error(err)
   }).finally(() => {
     confirmSubmitting.value = false
   })
@@ -974,13 +968,13 @@ const openReceiptDialog = (row) => {
   receiptData.value = null
   getRecyclingReceipt(id).then((data) => {
     receiptData.value = data?.data || data
-  }).catch((err) => {
-    console.error(err)
   })
 }
 
 const openTxHash = (txHash) => {
-  router.push({ name: 'Trace', query: { txHash: String(txHash || '') } })
+  const hash = String(txHash || '').trim()
+  if (!hash) return
+  router.push({ name: 'Trace', query: { txHash: hash } }).catch(() => { })
 }
 
 const openFileInNewTab = (rawUrl) => {
@@ -1084,11 +1078,24 @@ watch(
 }
 
 .valuation-basis__raw {
-  max-height: 120px;
   border-radius: 4px;
   border: 1px dashed #ebeef5;
   background-color: #f8f9fb;
   padding: 6px 8px;
+}
+
+.valuation-basis__raw-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.valuation-basis__rawbox {
+  margin-top: 6px;
+  max-height: 140px;
+  overflow: auto;
 }
 
 .valuation-basis__pre {

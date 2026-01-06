@@ -64,9 +64,28 @@ service.interceptors.response.use(
       return res
     }
 
-    if (res.code !== 200) {
+    const isPlainObject = res !== null && typeof res === 'object' && !Array.isArray(res)
+    if (!isPlainObject || typeof res.code !== 'number') {
+      const baseURL = response?.config?.baseURL || ''
+      const url = response?.config?.url || ''
+      const endpoint = `${baseURL}${url}`.trim()
+      const message = endpoint ? `接口返回异常：${endpoint}` : '接口返回异常'
       ElMessage({
-        message: res.message || 'Error',
+        message,
+        type: 'error',
+        duration: 5 * 1000
+      })
+      return Promise.reject(new Error(message))
+    }
+
+    if (res.code !== 200) {
+      const baseURL = response?.config?.baseURL || ''
+      const url = response?.config?.url || ''
+      const endpoint = `${baseURL}${url}`.trim()
+      const rawMessage = res.message || '操作失败'
+      const displayMessage = endpoint ? `${rawMessage}：${endpoint}` : rawMessage
+      ElMessage({
+        message: displayMessage,
         type: 'error',
         duration: 5 * 1000
       })
@@ -92,7 +111,7 @@ service.interceptors.response.use(
           })
         }
       }
-      return Promise.reject(new Error(res.message || 'Error'))
+      return Promise.reject(new Error(displayMessage))
     } else {
       return res.data
     }

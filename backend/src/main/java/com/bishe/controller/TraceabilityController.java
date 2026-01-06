@@ -8,13 +8,9 @@ import com.bishe.service.*;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
-import smile.data.DataFrame;
-import smile.data.formula.Formula;
-import smile.regression.RandomForest;
 
 import java.math.BigDecimal;
 import java.nio.file.Files;
@@ -52,30 +48,6 @@ public class TraceabilityController {
     private ISysRoleService sysRoleService;
     @Autowired
     private IBatteryInfoService batteryInfoService;
-    @Autowired
-    private JdbcTemplate jdbcTemplate;
-
-    private static final int AI_RECYCLING_MODEL_ID = 1;
-    private static final java.util.List<String> AI_RECYCLING_FEATURES = java.util.List.of(
-            "capacity",
-            "voltage",
-            "capacityVoltage",
-            "maintenanceCount",
-            "batteryStatus"
-    );
-
-    @lombok.Data
-    private static class AiRecyclingModel {
-        private String type;
-        private java.util.List<String> features;
-        private String modelBase64;
-        private int samples;
-        private String trainedAt;
-        private java.util.Map<String, Object> params;
-    }
-
-    private volatile String cachedAiRecyclingModelJson;
-    private volatile RandomForest cachedAiRecyclingModel;
 
     private Long getCurrentUserId(HttpServletRequest request) {
         if (request == null) {
@@ -266,18 +238,18 @@ public class TraceabilityController {
         }
         sysAuditService.submitAudit("RECYCLING", appraisal.getAppraisalId().toString(), applyUser);
 
+        java.util.Map<String, Object> applyPayload = new java.util.HashMap<>();
+        applyPayload.put("appraisalId", appraisal.getAppraisalId());
+        applyPayload.put("batteryId", appraisal.getBatteryId());
+        applyPayload.put("applyUser", applyUser);
+        applyPayload.put("applyTime", appraisal.getApplyTime());
+        applyPayload.put("applyReason", appraisal.getApplyReason());
+        applyPayload.put("snapshotVoltage", appraisal.getSnapshotVoltage());
+        applyPayload.put("snapshotCapacity", appraisal.getSnapshotCapacity());
+        applyPayload.put("snapshotBatteryStatus", appraisal.getSnapshotBatteryStatus());
         String applyTxHash = chainService.submitTransaction(
                 "submitRecyclingApply",
-                cn.hutool.json.JSONUtil.toJsonStr(java.util.Map.of(
-                        "appraisalId", appraisal.getAppraisalId(),
-                        "batteryId", appraisal.getBatteryId(),
-                        "applyUser", applyUser,
-                        "applyTime", appraisal.getApplyTime(),
-                        "applyReason", appraisal.getApplyReason(),
-                        "snapshotVoltage", appraisal.getSnapshotVoltage(),
-                        "snapshotCapacity", appraisal.getSnapshotCapacity(),
-                        "snapshotBatteryStatus", appraisal.getSnapshotBatteryStatus()
-                ))
+                cn.hutool.json.JSONUtil.toJsonStr(applyPayload)
         );
 
         if (StringUtils.hasText(applyTxHash)) {
@@ -387,16 +359,13 @@ public class TraceabilityController {
             update.setUpdateTime(LocalDateTime.now());
             recyclingService.updateById(update);
 
-            chainService.submitTransaction(
-                    "uploadRecyclingPhoto",
-                    cn.hutool.json.JSONUtil.toJsonStr(java.util.Map.of(
-                            "appraisalId", appraisalId,
-                            "batteryId", appraisal.getBatteryId(),
-                            "operator", getCurrentUserDisplayName(request),
-                            "url", url,
-                            "time", LocalDateTime.now()
-                    ))
-            );
+            java.util.Map<String, Object> payload = new java.util.HashMap<>();
+            payload.put("appraisalId", appraisalId);
+            payload.put("batteryId", appraisal.getBatteryId());
+            payload.put("operator", getCurrentUserDisplayName(request));
+            payload.put("url", url);
+            payload.put("time", LocalDateTime.now());
+            chainService.submitTransaction("uploadRecyclingPhoto", cn.hutool.json.JSONUtil.toJsonStr(payload));
             return Result.success(url);
         } catch (Exception e) {
             return Result.error(500, "上传失败");
@@ -448,16 +417,13 @@ public class TraceabilityController {
             update.setUpdateTime(LocalDateTime.now());
             recyclingService.updateById(update);
 
-            chainService.submitTransaction(
-                    "uploadRecyclingReport",
-                    cn.hutool.json.JSONUtil.toJsonStr(java.util.Map.of(
-                            "appraisalId", appraisalId,
-                            "batteryId", appraisal.getBatteryId(),
-                            "operator", getCurrentUserDisplayName(request),
-                            "url", url,
-                            "time", LocalDateTime.now()
-                    ))
-            );
+            java.util.Map<String, Object> payload = new java.util.HashMap<>();
+            payload.put("appraisalId", appraisalId);
+            payload.put("batteryId", appraisal.getBatteryId());
+            payload.put("operator", getCurrentUserDisplayName(request));
+            payload.put("url", url);
+            payload.put("time", LocalDateTime.now());
+            chainService.submitTransaction("uploadRecyclingReport", cn.hutool.json.JSONUtil.toJsonStr(payload));
             return Result.success(url);
         } catch (Exception e) {
             return Result.error(500, "上传失败");
@@ -491,60 +457,68 @@ public class TraceabilityController {
         }
 
         String batteryId = appraisal.getBatteryId();
+        BatteryInfo battery = StringUtils.hasText(batteryId) ? batteryInfoService.getById(batteryId) : null;
+        BigDecimal capacity = battery != null ? battery.getCapacity() : null;
+        if (capacity == null) {
+            capacity = appraisal.getSnapshotCapacity();
+        }
+        if (capacity == null || capacity.compareTo(BigDecimal.ZERO) <= 0) {
+            return Result.error(400, "缺少容量数据，无法计算预估价");
+        }
+
+        Integer batteryStatus = battery != null ? battery.getStatus() : null;
+        if (batteryStatus == null) {
+            batteryStatus = appraisal.getSnapshotBatteryStatus();
+        }
+
+        long maintenanceCount = 0;
+        long transferCount = 0;
+        if (StringUtils.hasText(batteryId)) {
+            maintenanceCount = maintenanceService.count(new LambdaQueryWrapper<MaintenanceRecord>()
+                    .eq(MaintenanceRecord::getBatteryId, batteryId));
+            transferCount = transferService.count(new LambdaQueryWrapper<BatteryTransferRecord>()
+                    .eq(BatteryTransferRecord::getBatteryId, batteryId));
+        }
+
+        double statusFactor;
+        if (batteryStatus == null) {
+            statusFactor = 0.8;
+        } else {
+            statusFactor = switch (batteryStatus) {
+                case 1 -> 0.95;
+                case 2 -> 0.90;
+                case 3 -> 0.80;
+                case 4 -> 0.75;
+                case 5, 6 -> 0.70;
+                case 7 -> 0.65;
+                default -> 0.80;
+            };
+        }
+        double maintenanceFactor = Math.max(0.5, 1 - Math.min(maintenanceCount * 0.06, 0.36));
+        double transferFactor = Math.max(0.6, 1 - Math.min(transferCount * 0.03, 0.21));
+        BigDecimal preliminary = capacity
+                .multiply(BigDecimal.valueOf(80))
+                .multiply(BigDecimal.valueOf(statusFactor))
+                .multiply(BigDecimal.valueOf(maintenanceFactor))
+                .multiply(BigDecimal.valueOf(transferFactor))
+                .setScale(2, java.math.RoundingMode.HALF_UP);
+        if (preliminary.compareTo(BigDecimal.ZERO) <= 0) {
+            return Result.error(400, "预估价计算失败");
+        }
+
         LambdaQueryWrapper<MaintenanceRecord> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(StringUtils.hasText(batteryId), MaintenanceRecord::getBatteryId, batteryId);
         wrapper.orderByDesc(MaintenanceRecord::getCreateTime);
         List<MaintenanceRecord> history = maintenanceService.list(wrapper);
         String historyJson = cn.hutool.json.JSONUtil.toJsonStr(history == null ? java.util.Collections.emptyList() : history);
 
-        BigDecimal capacity = appraisal.getSnapshotCapacity();
-        BigDecimal voltage = appraisal.getSnapshotVoltage();
-        if (capacity == null || voltage == null) {
-            BatteryInfo battery = StringUtils.hasText(batteryId) ? batteryInfoService.getById(batteryId) : null;
-            if (battery != null) {
-                if (capacity == null) {
-                    capacity = battery.getCapacity();
-                }
-                if (voltage == null) {
-                    voltage = battery.getVoltage();
-                }
-            }
+        String operator = getCurrentUserDisplayName(request);
+        if (!StringUtils.hasText(operator)) {
+            operator = "system";
         }
-        if (capacity == null || voltage == null) {
-            return Result.error(400, "电池关键指标缺失，无法估值");
-        }
-
-        int maintenanceCount = history == null ? 0 : history.size();
-        Integer batteryStatus = appraisal.getSnapshotBatteryStatus();
-        if (batteryStatus == null) {
-            BatteryInfo battery = StringUtils.hasText(batteryId) ? batteryInfoService.getById(batteryId) : null;
-            batteryStatus = battery != null ? battery.getStatus() : null;
-        }
-        if (batteryStatus == null) {
-            batteryStatus = 0;
-        }
-
-        AiRecyclingModel model = ensureAiRecyclingModel();
-        double cap = capacity.doubleValue();
-        double vol = voltage.doubleValue();
-        double capVol = cap * vol;
-        double[] x = new double[]{cap, vol, capVol, maintenanceCount, batteryStatus};
-        Double predicted = predict(model, x);
-        BigDecimal preliminary;
-        String basis;
-        if (predicted == null || !Double.isFinite(predicted) || predicted < 0) {
-            BigDecimal base = capacity.multiply(voltage).multiply(new BigDecimal("0.60"));
-            BigDecimal penalty = new BigDecimal(maintenanceCount).multiply(new BigDecimal("20"));
-            BigDecimal fallback = base.subtract(penalty);
-            if (fallback.compareTo(BigDecimal.ZERO) < 0) {
-                fallback = BigDecimal.ZERO;
-            }
-            preliminary = fallback.setScale(2, java.math.RoundingMode.HALF_UP);
-            basis = "ai_model_unavailable_fallback; capacity*voltage*0.60 - maintenanceCount*20; capacity=" + capacity + ", voltage=" + voltage + ", maintenanceCount=" + maintenanceCount;
-        } else {
-            preliminary = new BigDecimal(predicted).setScale(2, java.math.RoundingMode.HALF_UP);
-            basis = "ai_random_forest_local; features=" + AI_RECYCLING_FEATURES + "; capacity=" + capacity + ", voltage=" + voltage + ", capacityVoltage=" + new BigDecimal(capVol).setScale(4, java.math.RoundingMode.HALF_UP) + ", maintenanceCount=" + maintenanceCount + ", batteryStatus=" + batteryStatus + "; samples=" + (model == null ? 0 : model.getSamples());
-        }
+        String basis = ("auto; operator=" + operator + "; time=" + LocalDateTime.now() + "; batteryId=" + (batteryId == null ? "" : batteryId)
+                + "; maintenanceCount=" + maintenanceCount + "; transferCount=" + transferCount
+                + "; batteryStatus=" + (batteryStatus == null ? "" : batteryStatus)).trim();
 
         RecyclingAppraisal update = new RecyclingAppraisal();
         update.setAppraisalId(appraisal.getAppraisalId());
@@ -555,147 +529,19 @@ public class TraceabilityController {
         update.setUpdateTime(LocalDateTime.now());
         recyclingService.updateById(update);
 
-        chainService.submitTransaction(
-                "calcRecyclingValuation",
-                cn.hutool.json.JSONUtil.toJsonStr(java.util.Map.of(
-                        "appraisalId", appraisal.getAppraisalId(),
-                        "batteryId", appraisal.getBatteryId(),
-                        "preliminaryValue", preliminary,
-                        "valuationBasis", basis,
-                        "operator", getCurrentUserDisplayName(request),
-                        "time", LocalDateTime.now()
-                ))
-        );
+        java.util.Map<String, Object> payload = new java.util.HashMap<>();
+        payload.put("appraisalId", appraisal.getAppraisalId());
+        payload.put("batteryId", appraisal.getBatteryId());
+        payload.put("preliminaryValue", preliminary);
+        payload.put("valuationBasis", basis);
+        payload.put("operator", getCurrentUserDisplayName(request));
+        payload.put("time", LocalDateTime.now());
+        chainService.submitTransaction("saveRecyclingValuation", cn.hutool.json.JSONUtil.toJsonStr(payload));
 
         RecyclingAppraisal updated = recyclingService.getById(appraisal.getAppraisalId());
         return Result.success(updated);
     }
 
-    @PostMapping("/recycling/valuation/ai/train")
-    @Transactional(rollbackFor = Exception.class)
-    public Result<java.util.Map<String, Object>> trainRecyclingValuationAi(@RequestBody AiTrainDto dto,
-                                                                           HttpServletRequest request) {
-        Long userId = getCurrentUserId(request);
-        if (!hasAnyRole(userId, "admin", "recycler")) {
-            return forbidden();
-        }
-
-        int ntrees = dto != null && dto.getNtrees() != null ? dto.getNtrees() : (dto != null && dto.getEpochs() != null ? dto.getEpochs() : 300);
-        int maxDepth = dto != null && dto.getMaxDepth() != null ? dto.getMaxDepth() : 18;
-        int maxNodes = dto != null && dto.getMaxNodes() != null ? dto.getMaxNodes() : 0;
-        int nodeSize = dto != null && dto.getNodeSize() != null ? dto.getNodeSize() : 5;
-        double subsample = dto != null && dto.getSubsample() != null ? dto.getSubsample() : 1.0;
-        int mtry = dto != null && dto.getMtry() != null ? dto.getMtry() : 0;
-
-        if (ntrees < 50 || ntrees > 3000) {
-            return Result.error(400, "ntrees范围应在50~3000");
-        }
-        if (maxDepth < 2 || maxDepth > 60) {
-            return Result.error(400, "maxDepth范围应在2~60");
-        }
-        if (maxNodes < 0 || maxNodes > 200000) {
-            return Result.error(400, "maxNodes范围应在0~200000");
-        }
-        if (nodeSize < 1 || nodeSize > 200) {
-            return Result.error(400, "nodeSize范围应在1~200");
-        }
-        if (!(subsample > 0 && subsample <= 1)) {
-            return Result.error(400, "subsample范围应在(0,1]");
-        }
-        if (mtry < 0 || mtry > AI_RECYCLING_FEATURES.size()) {
-            return Result.error(400, "mtry范围应在0~特征数");
-        }
-
-        java.util.List<RecyclingAppraisal> rows = recyclingService.list(new LambdaQueryWrapper<RecyclingAppraisal>()
-                .eq(RecyclingAppraisal::getStatus, 3)
-                .isNotNull(RecyclingAppraisal::getFinalValue)
-                .orderByDesc(RecyclingAppraisal::getRecycleTime));
-
-        java.util.List<double[]> xs = new java.util.ArrayList<>();
-        java.util.List<Double> ys = new java.util.ArrayList<>();
-        for (RecyclingAppraisal r : rows) {
-            if (r == null || r.getFinalValue() == null) {
-                continue;
-            }
-            String bid = r.getBatteryId();
-            BigDecimal c = r.getSnapshotCapacity();
-            BigDecimal v = r.getSnapshotVoltage();
-            Integer s = r.getSnapshotBatteryStatus();
-            BatteryInfo b = null;
-            if ((c == null || v == null || s == null) && StringUtils.hasText(bid)) {
-                b = batteryInfoService.getById(bid);
-            }
-            if (c == null && b != null) {
-                c = b.getCapacity();
-            }
-            if (v == null && b != null) {
-                v = b.getVoltage();
-            }
-            if (s == null && b != null) {
-                s = b.getStatus();
-            }
-            if (c == null || v == null) {
-                continue;
-            }
-            if (s == null) {
-                s = 0;
-            }
-            long mc = 0;
-            if (StringUtils.hasText(bid)) {
-                mc = maintenanceService.count(new LambdaQueryWrapper<MaintenanceRecord>().eq(MaintenanceRecord::getBatteryId, bid));
-            }
-            double cap = c.doubleValue();
-            double vol = v.doubleValue();
-            double capVol = cap * vol;
-            xs.add(new double[]{cap, vol, capVol, mc, s});
-            ys.add(r.getFinalValue().doubleValue());
-        }
-
-        if (xs.size() < 5) {
-            return Result.error(400, "可训练样本不足（至少需要5条已完成回收记录）");
-        }
-
-        int m = xs.size();
-        int n = AI_RECYCLING_FEATURES.size();
-        double[][] X = xs.toArray(new double[0][]);
-        double[][] ycol = new double[m][1];
-        for (int i = 0; i < m; i++) {
-            ycol[i][0] = ys.get(i);
-        }
-        String[] cols = AI_RECYCLING_FEATURES.toArray(new String[0]);
-        DataFrame df = DataFrame.of(X, cols).merge(DataFrame.of(ycol, "y"));
-        RandomForest rf = RandomForest.fit(Formula.lhs("y"), df, ntrees, mtry, maxDepth, maxNodes, nodeSize, subsample);
-
-        String base64 = serializeToBase64(rf);
-        if (!StringUtils.hasText(base64)) {
-            return Result.error(500, "模型训练完成但序列化失败，请检查依赖与运行环境");
-        }
-        AiRecyclingModel model = new AiRecyclingModel();
-        model.setType("smile_rf");
-        model.setFeatures(AI_RECYCLING_FEATURES);
-        model.setModelBase64(base64);
-        model.setSamples(m);
-        model.setTrainedAt(LocalDateTime.now().toString());
-        java.util.Map<String, Object> params = new java.util.HashMap<>();
-        params.put("ntrees", ntrees);
-        params.put("mtry", mtry);
-        params.put("maxDepth", maxDepth);
-        params.put("maxNodes", maxNodes);
-        params.put("nodeSize", nodeSize);
-        params.put("subsample", subsample);
-        model.setParams(params);
-        if (!saveAiRecyclingModel(model)) {
-            return Result.error(500, "模型已训练但保存失败：请确认 ai_recycling_model 表存在且可写");
-        }
-
-        java.util.Map<String, Object> resp = new java.util.HashMap<>();
-        resp.put("samples", m);
-        resp.put("features", AI_RECYCLING_FEATURES);
-        resp.put("trainedAt", model.getTrainedAt());
-        resp.put("type", model.getType());
-        resp.put("params", model.getParams());
-        return Result.success(resp);
-    }
 
     @PostMapping("/recycling/valuation/confirm")
     @Transactional(rollbackFor = Exception.class)
@@ -732,17 +578,17 @@ public class TraceabilityController {
         }
 
         LocalDateTime now = LocalDateTime.now();
+        java.util.Map<String, Object> payload = new java.util.HashMap<>();
+        payload.put("appraisalId", appraisal.getAppraisalId());
+        payload.put("batteryId", appraisal.getBatteryId());
+        payload.put("recycleNo", appraisal.getRecycleNo());
+        payload.put("preliminaryValue", appraisal.getPreliminaryValue());
+        payload.put("finalValue", dto.getFinalValue());
+        payload.put("priceReviewer", reviewer);
+        payload.put("time", now);
         String receiptHash = chainService.submitTransaction(
                 "confirmRecyclingPrice",
-                cn.hutool.json.JSONUtil.toJsonStr(java.util.Map.of(
-                        "appraisalId", appraisal.getAppraisalId(),
-                        "batteryId", appraisal.getBatteryId(),
-                        "recycleNo", appraisal.getRecycleNo(),
-                        "preliminaryValue", appraisal.getPreliminaryValue(),
-                        "finalValue", dto.getFinalValue(),
-                        "priceReviewer", reviewer,
-                        "time", now
-                ))
+                cn.hutool.json.JSONUtil.toJsonStr(payload)
         );
 
         RecyclingAppraisal update = new RecyclingAppraisal();
@@ -826,170 +672,6 @@ public class TraceabilityController {
         }
     }
 
-    private AiRecyclingModel ensureAiRecyclingModel() {
-        AiRecyclingModel model = loadAiRecyclingModel();
-        if (model != null && StringUtils.hasText(model.getModelBase64())) {
-            return model;
-        }
-        return null;
-    }
-
-    private Double predict(AiRecyclingModel model, double[] raw) {
-        if (model == null || raw == null || raw.length < AI_RECYCLING_FEATURES.size()) {
-            return null;
-        }
-        if (!"smile_rf".equalsIgnoreCase(model.getType())) {
-            return null;
-        }
-
-        String json = cn.hutool.json.JSONUtil.toJsonStr(model);
-        RandomForest rf;
-        if (StringUtils.hasText(cachedAiRecyclingModelJson) && cachedAiRecyclingModel != null && cachedAiRecyclingModelJson.equals(json)) {
-            rf = cachedAiRecyclingModel;
-        } else {
-            rf = deserializeFromBase64(model.getModelBase64());
-            if (rf == null) {
-                return null;
-            }
-            cachedAiRecyclingModelJson = json;
-            cachedAiRecyclingModel = rf;
-        }
-
-        String[] cols = AI_RECYCLING_FEATURES.toArray(new String[0]);
-        DataFrame df = DataFrame.of(new double[][]{raw}, cols);
-        double[] out = rf.predict(df);
-        if (out == null || out.length == 0) {
-            return null;
-        }
-        return out[0];
-    }
-
-    private void ensureAiRecyclingModelTable() {
-        try {
-            jdbcTemplate.execute(
-                    "CREATE TABLE IF NOT EXISTS ai_recycling_model (" +
-                            "id INT PRIMARY KEY," +
-                            "model_json LONGTEXT," +
-                            "train_samples INT," +
-                            "update_time DATETIME" +
-                            ")"
-            );
-        } catch (Exception ignored) {
-        }
-    }
-
-    private AiRecyclingModel loadAiRecyclingModel() {
-        try {
-            ensureAiRecyclingModelTable();
-            java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.queryForList(
-                    "SELECT model_json, train_samples FROM ai_recycling_model WHERE id = ?", AI_RECYCLING_MODEL_ID);
-            if (rows == null || rows.isEmpty()) {
-                return null;
-            }
-            Object mj = rows.get(0).get("model_json");
-            String modelJson = mj == null ? null : String.valueOf(mj);
-            if (!StringUtils.hasText(modelJson)) {
-                return null;
-            }
-            cn.hutool.json.JSONObject obj = cn.hutool.json.JSONUtil.parseObj(modelJson);
-            AiRecyclingModel model = new AiRecyclingModel();
-            model.setType(obj.getStr("type"));
-            model.setFeatures(obj.getJSONArray("features") != null ? obj.getJSONArray("features").toList(String.class) : AI_RECYCLING_FEATURES);
-            model.setModelBase64(obj.getStr("modelBase64"));
-            java.util.Map<String, Object> params = null;
-            try {
-                Object p = obj.get("params");
-                if (p instanceof cn.hutool.json.JSONObject pj) {
-                    params = new java.util.HashMap<>();
-                    for (java.util.Map.Entry<String, Object> e : pj.entrySet()) {
-                        params.put(e.getKey(), e.getValue());
-                    }
-                } else if (p instanceof java.util.Map<?, ?> pm) {
-                    params = new java.util.HashMap<>();
-                    for (java.util.Map.Entry<?, ?> e : pm.entrySet()) {
-                        String k = e.getKey() == null ? null : String.valueOf(e.getKey());
-                        if (StringUtils.hasText(k)) {
-                            params.put(k, e.getValue());
-                        }
-                    }
-                }
-            } catch (Exception ignored) {
-            }
-            model.setParams(params);
-            Object ts = rows.get(0).get("train_samples");
-            int samples = 0;
-            if (ts instanceof Number num) {
-                samples = num.intValue();
-            } else if (ts != null) {
-                try {
-                    samples = Integer.parseInt(String.valueOf(ts));
-                } catch (Exception ignored) {
-                }
-            }
-            model.setSamples(samples);
-            model.setTrainedAt(obj.getStr("trainedAt"));
-            return model;
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    private boolean saveAiRecyclingModel(AiRecyclingModel model) {
-        if (model == null) {
-            return false;
-        }
-        ensureAiRecyclingModelTable();
-        java.util.Map<String, Object> payload = new java.util.HashMap<>();
-        payload.put("type", model.getType());
-        payload.put("features", model.getFeatures() == null ? AI_RECYCLING_FEATURES : model.getFeatures());
-        payload.put("modelBase64", model.getModelBase64());
-        payload.put("samples", model.getSamples());
-        payload.put("trainedAt", model.getTrainedAt());
-        payload.put("params", model.getParams());
-        String json = cn.hutool.json.JSONUtil.toJsonStr(payload);
-        int samples = model.getSamples();
-        try {
-            int updated = jdbcTemplate.update(
-                    "INSERT INTO ai_recycling_model(id, model_json, train_samples, update_time) VALUES (?, ?, ?, NOW()) " +
-                            "ON DUPLICATE KEY UPDATE model_json=VALUES(model_json), train_samples=VALUES(train_samples), update_time=VALUES(update_time)",
-                    AI_RECYCLING_MODEL_ID, json, samples
-            );
-            return updated > 0;
-        } catch (Exception ignored) {
-            return false;
-        }
-    }
-
-    private String serializeToBase64(Object obj) {
-        try {
-            java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
-            try (java.io.ObjectOutputStream oos = new java.io.ObjectOutputStream(baos)) {
-                oos.writeObject(obj);
-            }
-            return java.util.Base64.getEncoder().encodeToString(baos.toByteArray());
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    private RandomForest deserializeFromBase64(String base64) {
-        if (!StringUtils.hasText(base64)) {
-            return null;
-        }
-        try {
-            byte[] bytes = java.util.Base64.getDecoder().decode(base64);
-            try (java.io.ObjectInputStream ois = new java.io.ObjectInputStream(new java.io.ByteArrayInputStream(bytes))) {
-                Object obj = ois.readObject();
-                if (obj instanceof RandomForest rf) {
-                    return rf;
-                }
-                return null;
-            }
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
     // ==================== 维修记录 (MaintenanceRecord) ====================
 
     @GetMapping("/maintenance/list")
@@ -1055,20 +737,6 @@ public class TraceabilityController {
     }
 
     @lombok.Data
-    public static class AiTrainDto {
-        private Integer epochs;
-        private Double lr;
-        private Double l2;
-
-        private Integer ntrees;
-        private Integer mtry;
-        private Integer maxDepth;
-        private Integer maxNodes;
-        private Integer nodeSize;
-        private Double subsample;
-    }
-
-    @lombok.Data
     public static class RecyclingAuditDto {
         private Long appraisalId;
         private Integer status;
@@ -1078,6 +746,8 @@ public class TraceabilityController {
     @lombok.Data
     public static class RecyclingValuationCalcDto {
         private Long appraisalId;
+        private BigDecimal preliminaryValue;
+        private String valuationBasis;
     }
 
     @lombok.Data

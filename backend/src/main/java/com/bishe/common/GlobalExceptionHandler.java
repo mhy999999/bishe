@@ -55,13 +55,21 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public Result<String> handleException(Exception e) {
         log.error("系统异常", e);
-        return Result.error(e.getMessage());
+        String message = e.getMessage();
+        if (message == null || message.isBlank()) {
+            message = "系统异常，请稍后重试";
+        }
+        return Result.error(500, message);
     }
 
     @ExceptionHandler(RuntimeException.class)
     public Result<String> handleRuntimeException(RuntimeException e) {
         log.error("业务异常", e);
-        return Result.error(e.getMessage());
+        String message = e.getMessage();
+        if (message == null || message.isBlank()) {
+            message = "操作失败";
+        }
+        return Result.error(500, message);
     }
 
     private static Throwable getRootCause(Throwable t) {

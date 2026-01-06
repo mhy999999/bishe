@@ -163,30 +163,24 @@ public class SysAuditServiceImpl extends ServiceImpl<SysAuditMapper, SysAudit> i
                     batteryInfoService.updateById(batteryInfo);
                 }
 
-                chainService.submitTransaction(
-                        "auditRecyclingApply",
-                        JSONUtil.toJsonStr(java.util.Map.of(
-                                "appraisalId", appraisal.getAppraisalId(),
-                                "batteryId", appraisal.getBatteryId(),
-                                "status", status,
-                                "auditOpinion", auditOpinion,
-                                "auditor", auditor,
-                                "auditTime", audit.getAuditTime(),
-                                "recycleNo", recycleNo
-                        ))
-                );
+                java.util.Map<String, Object> payload = new java.util.HashMap<>();
+                payload.put("appraisalId", appraisal.getAppraisalId());
+                payload.put("batteryId", appraisal.getBatteryId());
+                payload.put("status", status);
+                payload.put("auditOpinion", auditOpinion);
+                payload.put("auditor", auditor);
+                payload.put("auditTime", audit.getAuditTime());
+                payload.put("recycleNo", recycleNo);
+                chainService.submitTransaction("auditRecyclingApply", JSONUtil.toJsonStr(payload));
             } else if (status != null && status == 2) {
-                chainService.submitTransaction(
-                        "auditRecyclingApply",
-                        JSONUtil.toJsonStr(java.util.Map.of(
-                                "appraisalId", appraisal.getAppraisalId(),
-                                "batteryId", appraisal.getBatteryId(),
-                                "status", status,
-                                "auditOpinion", auditOpinion,
-                                "auditor", auditor,
-                                "auditTime", audit.getAuditTime()
-                        ))
-                );
+                java.util.Map<String, Object> payload = new java.util.HashMap<>();
+                payload.put("appraisalId", appraisal.getAppraisalId());
+                payload.put("batteryId", appraisal.getBatteryId());
+                payload.put("status", status);
+                payload.put("auditOpinion", auditOpinion);
+                payload.put("auditor", auditor);
+                payload.put("auditTime", audit.getAuditTime());
+                chainService.submitTransaction("auditRecyclingApply", JSONUtil.toJsonStr(payload));
             }
             recyclingAppraisalService.updateById(update);
         }
