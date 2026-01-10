@@ -113,6 +113,18 @@ public class TraceabilityController {
 
     @PostMapping("/transfer")
     public Result<Boolean> saveTransfer(@RequestBody BatteryTransferRecord record) {
+        if (record == null) {
+            return Result.error(400, "请求数据不能为空");
+        }
+        if (!org.springframework.util.StringUtils.hasText(record.getBatteryId())) {
+            return Result.error(400, "电池ID不能为空");
+        }
+        if (record.getFromOwner() == null) {
+            return Result.error(400, "原拥有者ID不能为空");
+        }
+        if (record.getToOwner() == null) {
+            return Result.error(400, "新拥有者ID不能为空");
+        }
         return Result.success(transferService.save(record));
     }
 

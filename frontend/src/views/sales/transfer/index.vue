@@ -46,13 +46,21 @@
       <el-form ref="dataForm" :rules="rules" :model="temp" label-position="left" label-width="100px"
         style="width: 400px; margin-left:50px;">
         <el-form-item label="电池ID" prop="batteryId">
-          <el-input v-model="temp.batteryId" />
+          <el-select v-model="temp.batteryId" filterable placeholder="请选择电池">
+            <el-option v-for="item in batteryOptions" :key="item.batteryId" :label="item.batteryId"
+              :value="item.batteryId" />
+          </el-select>
         </el-form-item>
         <el-form-item label="原拥有者ID" prop="fromOwner">
-          <el-input v-model="temp.fromOwner" />
+          <el-select v-model="temp.fromOwner" filterable placeholder="请选择原拥有者">
+            <el-option v-for="item in ownerOptions" :key="item.userId" :label="item.label" :value="item.userId" />
+          </el-select>
         </el-form-item>
         <el-form-item label="新拥有者ID" prop="toOwner">
-          <el-input v-model="temp.toOwner" />
+          <el-select v-model="temp.toOwner" filterable placeholder="请选择新拥有者">
+            <el-option v-for="item in ownerOptions" :key="'to-' + item.userId" :label="item.label"
+              :value="item.userId" />
+          </el-select>
         </el-form-item>
         <el-form-item label="流转类型" prop="actionType">
           <el-select v-model="temp.actionType" placeholder="请选择">
@@ -88,6 +96,8 @@ import Pagination from '@/components/Pagination/index.vue'
 import { ElMessage } from 'element-plus'
 import { InfoFilled } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
+import { getBatteryList } from '@/api/battery'
+import { getUserList } from '@/api/system'
 
 const list = ref([])
 const total = ref(0)
@@ -102,16 +112,20 @@ const listQuery = reactive({
 
 const temp = reactive({
   batteryId: '',
-  fromOwner: '',
-  toOwner: '',
+  fromOwner: undefined,
+  toOwner: undefined,
   actionType: ''
 })
 
 const dialogFormVisible = ref(false)
 
+const batteryOptions = ref([])
+const ownerOptions = ref([])
+
 const rules = {
-  batteryId: [{ required: true, message: '电池ID必填', trigger: 'blur' }],
-  toOwner: [{ required: true, message: '新拥有者必填', trigger: 'blur' }]
+  batteryId: [{ required: true, message: '电池ID必填', trigger: 'change' }],
+  fromOwner: [{ required: true, message: '原拥有者必填', trigger: 'change' }],
+  toOwner: [{ required: true, message: '新拥有者必填', trigger: 'change' }]
 }
 
 const getList = () => {
@@ -141,13 +155,40 @@ const handleFilter = () => {
 
 const resetTemp = () => {
   temp.batteryId = ''
-  temp.fromOwner = ''
-  temp.toOwner = ''
+  temp.fromOwner = undefined
+  temp.toOwner = undefined
   temp.actionType = 'SALE_TO_DEALER'
+}
+
+const ensureBatteryOptions = async () => {
+  if (batteryOptions.value.length > 0) return
+  const res = await getBatteryList({ pageNum: 1, pageSize: 1000 })
+  const records = res?.records || res?.data?.records || []
+  batteryOptions.value = (records || []).map(item => ({
+    batteryId: String(item.batteryId || '').trim()
+  })).filter(item => item.batteryId)
+}
+
+const ensureOwnerOptions = async () => {
+  if (ownerOptions.value.length > 0) return
+  const res = await getUserList({ pageNum: 1, pageSize: 1000 })
+  const pageData = res?.records || res?.data?.records || []
+  ownerOptions.value = (pageData || []).map(item => {
+    const id = item.userId
+    const username = String(item.username || '').trim()
+    const nickname = String(item.nickname || '').trim()
+    const labelParts = [id, username, nickname].filter(Boolean)
+    return {
+      userId: id,
+      label: labelParts.join(' / ')
+    }
+  }).filter(item => item.userId != null)
 }
 
 const handleCreate = () => {
   resetTemp()
+  ensureBatteryOptions()
+  ensureOwnerOptions()
   dialogFormVisible.value = true
 }
 
@@ -165,6 +206,9 @@ const createData = () => {
 
 onMounted(() => {
   getList()
+
+  ensureBatteryOptions()
+  ensureOwnerOptions()
 
   const batteryId = route.query?.batteryId
   if (batteryId != null && String(batteryId).trim()) {
