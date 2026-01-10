@@ -67,14 +67,14 @@
         <el-form-item label="电池ID" prop="batteryId">
           <el-input v-model="applyForm.batteryId" placeholder="请输入电池ID" />
         </el-form-item>
-        <el-form-item label="外观描述">
-          <el-input v-model="applyForm.appearance" type="textarea" :rows="2" placeholder="可选" />
+        <el-form-item label="外观描述" prop="appearance">
+          <el-input v-model="applyForm.appearance" type="textarea" :rows="2" placeholder="请输入外观描述" />
         </el-form-item>
-        <el-form-item label="处理建议">
-          <el-input v-model="applyForm.suggestion" type="textarea" :rows="2" placeholder="可选" />
+        <el-form-item label="处理建议" prop="suggestion">
+          <el-input v-model="applyForm.suggestion" type="textarea" :rows="2" placeholder="请输入处理建议" />
         </el-form-item>
         <el-form-item label="回收原因" prop="reason">
-          <el-input v-model="applyForm.reason" type="textarea" :rows="5" placeholder="不少于50字" />
+          <el-input v-model="applyForm.reason" type="textarea" :rows="5" placeholder="请输入回收原因" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -503,20 +503,9 @@ const applyForm = reactive({
 
 const applyRules = {
   batteryId: [{ required: true, message: '电池ID必填', trigger: 'blur' }],
-  reason: [
-    { required: true, message: '回收原因必填', trigger: 'blur' },
-    {
-      validator: (_, value, callback) => {
-        const text = String(value || '').trim()
-        if (text.length < 50) {
-          callback(new Error('回收原因说明不少于50字'))
-          return
-        }
-        callback()
-      },
-      trigger: 'blur'
-    }
-  ]
+  appearance: [{ required: true, message: '外观描述必填', trigger: 'blur' }],
+  suggestion: [{ required: true, message: '处理建议必填', trigger: 'blur' }],
+  reason: [{ required: true, message: '回收原因必填', trigger: 'blur' }]
 }
 
 const openApplyDialog = () => {
@@ -535,8 +524,8 @@ const submitApply = () => {
     const payload = {
       batteryId: String(applyForm.batteryId || '').trim(),
       reason: String(applyForm.reason || '').trim(),
-      appearance: String(applyForm.appearance || '').trim() || undefined,
-      suggestion: String(applyForm.suggestion || '').trim() || undefined
+      appearance: String(applyForm.appearance || '').trim(),
+      suggestion: String(applyForm.suggestion || '').trim()
     }
     applyRecycling(payload).then(() => {
       applyDialogVisible.value = false

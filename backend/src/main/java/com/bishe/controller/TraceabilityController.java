@@ -188,9 +188,15 @@ public class TraceabilityController {
         if (dto == null || !StringUtils.hasText(dto.getBatteryId())) {
             return Result.error(400, "电池ID不能为空");
         }
+        if (!StringUtils.hasText(dto.getAppearance())) {
+            return Result.error(400, "外观描述不能为空");
+        }
+        if (!StringUtils.hasText(dto.getSuggestion())) {
+            return Result.error(400, "处理建议不能为空");
+        }
         String reason = dto.getReason();
-        if (!StringUtils.hasText(reason) || reason.trim().length() < 50) {
-            return Result.error(400, "回收原因说明不少于50字");
+        if (!StringUtils.hasText(reason)) {
+            return Result.error(400, "回收原因不能为空");
         }
         BatteryInfo battery = batteryInfoService.getById(dto.getBatteryId());
         if (battery == null) {

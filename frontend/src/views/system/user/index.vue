@@ -38,13 +38,10 @@
         </template>
       </el-table-column>
       <el-table-column label="创建时间" prop="createTime" align="center" width="180" />
-      <el-table-column label="操作" align="center" width="340" class-name="small-padding fixed-width">
+      <el-table-column label="操作" align="center" width="260" class-name="small-padding fixed-width">
         <template #default="{ row }">
           <el-button type="primary" size="small" @click="handleUpdate(row)">
             编辑
-          </el-button>
-          <el-button size="small" type="warning" @click="handlePassword(row)">
-            密码
           </el-button>
           <el-button size="small" type="danger" @click="handleDelete(row)">
             删除
@@ -103,29 +100,6 @@
       </template>
     </el-dialog>
 
-    <el-dialog title="查看 / 重置密码" v-model="passwordDialogVisible" width="520px" @closed="resetPasswordDialog">
-      <el-form :model="passwordForm" label-position="left" label-width="120px" style="width: 420px; margin-left: 40px;">
-        <el-form-item label="用户名">
-          <el-input v-model="passwordForm.username" disabled />
-        </el-form-item>
-        <el-form-item label="当前密码(加密)">
-          <el-input v-model="passwordForm.currentPassword" type="password" show-password readonly />
-        </el-form-item>
-        <el-form-item label="新密码">
-          <el-input v-model="passwordForm.newPassword" type="password" show-password />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <div class="dialog-footer">
-          <el-button @click="passwordDialogVisible = false">
-            取消
-          </el-button>
-          <el-button type="primary" :loading="passwordSubmitting" @click="submitPasswordReset">
-            确认重置
-          </el-button>
-        </div>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
@@ -133,7 +107,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import Pagination from '@/components/Pagination/index.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getUserList, createUser, updateUser, resetUserPassword, getUserPassword, deleteUser, getRoleAll, getUserRoleIds, updateUserRoleIds, getDeptTree } from '@/api/system'
+import { getUserList, createUser, updateUser, deleteUser, getRoleAll, getUserRoleIds, updateUserRoleIds, getDeptTree } from '@/api/system'
 
 const list = ref([])
 const total = ref(0)
@@ -143,8 +117,6 @@ const dialogStatus = ref('')
 const roleOptions = ref([])
 const roleIds = ref([])
 const deptTreeData = ref([])
-const passwordDialogVisible = ref(false)
-const passwordSubmitting = ref(false)
 
 const textMap = {
   update: '编辑用户',
@@ -166,13 +138,6 @@ const temp = reactive({
   email: '',
   phone: '',
   status: 0
-})
-
-const passwordForm = reactive({
-  userId: undefined,
-  username: '',
-  currentPassword: '',
-  newPassword: ''
 })
 
 const rules = {
@@ -254,43 +219,6 @@ const handleUpdate = async (row) => {
   roleIds.value = ids || []
   dialogStatus.value = 'update'
   dialogFormVisible.value = true
-}
-
-const resetPasswordDialog = () => {
-  passwordForm.userId = undefined
-  passwordForm.username = ''
-  passwordForm.currentPassword = ''
-  passwordForm.newPassword = ''
-  passwordSubmitting.value = false
-}
-
-const handlePassword = async (row) => {
-  resetPasswordDialog()
-  passwordForm.userId = row.userId
-  passwordForm.username = row.username
-  passwordDialogVisible.value = true
-  try {
-    const pwd = await getUserPassword(row.userId)
-    passwordForm.currentPassword = pwd || ''
-  } catch (e) {
-    passwordForm.currentPassword = ''
-  }
-}
-
-const submitPasswordReset = async () => {
-  if (!passwordForm.userId) return
-  if (!passwordForm.newPassword) {
-    ElMessage({ message: '请输入新密码', type: 'warning', duration: 2000 })
-    return
-  }
-  passwordSubmitting.value = true
-  try {
-    await resetUserPassword(passwordForm.userId, passwordForm.newPassword)
-    ElMessage({ message: '重置成功', type: 'success', duration: 2000 })
-    passwordDialogVisible.value = false
-  } finally {
-    passwordSubmitting.value = false
-  }
 }
 
 const createData = async () => {

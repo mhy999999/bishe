@@ -41,6 +41,9 @@ public class SystemController {
     @Autowired
     private SysRoleMapper sysRoleMapper;
 
+    private static final long DEFAULT_OWNER_DEPT_ID = 4L;
+    private static final long DEFAULT_OWNER_ROLE_ID = 4L;
+
     private Long getCurrentUserId(HttpServletRequest request) {
         Object userIdObj = request.getAttribute("userId");
         if (userIdObj instanceof Long userId) {
@@ -158,6 +161,11 @@ public class SystemController {
         
         // Fetch roles and permissions
         java.util.Set<String> roles = sysRoleService.getRoleKeysByUserId(userId);
+        if (roles == null || roles.isEmpty()) {
+            java.util.List<Long> roleIds = java.util.Collections.singletonList(DEFAULT_OWNER_ROLE_ID);
+            sysUserMapper.insertUserRoles(userId, roleIds);
+            roles = sysRoleService.getRoleKeysByUserId(userId);
+        }
         java.util.Set<String> permissions = sysMenuService.getPermsByUserId(userId);
         
         // If admin, give all permissions (convention)
@@ -188,6 +196,9 @@ public class SystemController {
         if (sysUserService.count(wrapper) > 0) {
             return Result.error("用户名已存在");
         }
+        if (sysUser.getDeptId() == null) {
+            sysUser.setDeptId(DEFAULT_OWNER_DEPT_ID);
+        }
         sysUser.setCreateTime(java.time.LocalDateTime.now());
         sysUser.setUpdateTime(java.time.LocalDateTime.now());
         if (!sysUser.getPassword().startsWith("sha256$")) {
@@ -196,7 +207,18 @@ public class SystemController {
         if (sysUser.getStatus() == null) {
             sysUser.setStatus(0);
         }
-        return Result.success(sysUserService.save(sysUser));
+        boolean saved = sysUserService.save(sysUser);
+        if (!saved) {
+            return Result.error("注册失败");
+        }
+
+        Long userId = sysUser.getUserId();
+        if (userId != null) {
+            java.util.List<Long> roleIds = java.util.Collections.singletonList(DEFAULT_OWNER_ROLE_ID);
+            sysUserMapper.insertUserRoles(userId, roleIds);
+        }
+
+        return Result.success(true);
     }
 
     @GetMapping("/user/list")

@@ -48,7 +48,7 @@
           <el-input v-model="temp.roleName" />
         </el-form-item>
         <el-form-item label="角色标识" prop="roleKey">
-          <el-input v-model="temp.roleKey" :disabled="dialogStatus === 'update'" />
+          <el-input v-model="temp.roleKey" />
         </el-form-item>
         <el-form-item label="状态" prop="status">
           <el-select v-model="temp.status" style="width: 100%;">
