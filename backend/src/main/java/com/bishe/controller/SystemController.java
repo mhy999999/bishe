@@ -638,13 +638,7 @@ public class SystemController {
         }
         return Result.success(sysMenuService.save(sysMenu));
     }
-// 
 
-
-
-
-
-// 1231231
     @PutMapping("/menu")
     public Result<Boolean> updateMenu(@RequestBody SysMenu sysMenu, HttpServletRequest request) {
         if (!isAdmin(getCurrentUserId(request))) {
