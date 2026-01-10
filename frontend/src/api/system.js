@@ -8,6 +8,13 @@ export function getUserList(params) {
   })
 }
 
+export function getUserOptions() {
+  return request({
+    url: '/system/user/options',
+    method: 'get'
+  })
+}
+
 export function createUser(data) {
   return request({
     url: '/system/user',

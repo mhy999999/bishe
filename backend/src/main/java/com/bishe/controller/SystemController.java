@@ -311,6 +311,31 @@ public class SystemController {
         return Result.success(out);
     }
 
+    @GetMapping("/user/options")
+    public Result<java.util.List<UserOption>> listUserOptions(HttpServletRequest request) {
+        Long userId = getCurrentUserId(request);
+        if (userId == null) {
+            return forbidden();
+        }
+        LambdaQueryWrapper<SysUser> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(SysUser::getStatus, 0);
+        java.util.List<SysUser> users = sysUserService.list(wrapper);
+        java.util.List<UserOption> options = new java.util.ArrayList<>();
+        if (users != null) {
+            for (SysUser u : users) {
+                if (u == null || u.getUserId() == null) {
+                    continue;
+                }
+                UserOption opt = new UserOption();
+                opt.setUserId(u.getUserId());
+                opt.setUsername(u.getUsername());
+                opt.setNickname(u.getNickname());
+                options.add(opt);
+            }
+        }
+        return Result.success(options);
+    }
+
     @GetMapping("/user/{id}")
     public Result<SysUser> getUserById(@PathVariable Long id, HttpServletRequest request) {
         if (!isAdmin(getCurrentUserId(request))) {
@@ -656,6 +681,13 @@ public class SystemController {
         private java.time.LocalDateTime updateTime;
         private String chainAccount;
         private java.util.List<String> roleNames;
+    }
+
+    @lombok.Data
+    public static class UserOption {
+        private Long userId;
+        private String username;
+        private String nickname;
     }
 
     private List<MenuNode> buildMenuTree(List<SysMenu> menus) {

@@ -46,13 +46,13 @@
       <el-form ref="dataForm" :rules="rules" :model="temp" label-position="left" label-width="100px"
         style="width: 400px; margin-left:50px;">
         <el-form-item label="电池ID" prop="batteryId">
-          <el-select v-model="temp.batteryId" filterable placeholder="请选择电池">
+          <el-select v-model="temp.batteryId" filterable placeholder="请选择电池" @change="onBatteryChange">
             <el-option v-for="item in batteryOptions" :key="item.batteryId" :label="item.batteryId"
               :value="item.batteryId" />
           </el-select>
         </el-form-item>
         <el-form-item label="原拥有者ID" prop="fromOwner">
-          <el-select v-model="temp.fromOwner" filterable placeholder="请选择原拥有者">
+          <el-select v-model="temp.fromOwner" filterable placeholder="请选择原拥有者" :disabled="true">
             <el-option v-for="item in ownerOptions" :key="item.userId" :label="item.label" :value="item.userId" />
           </el-select>
         </el-form-item>
@@ -91,12 +91,11 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { getTransferList, saveTransfer } from '@/api/trace'
+import { getTransferList, saveTransfer, getVehicleList } from '@/api/trace'
 import Pagination from '@/components/Pagination/index.vue'
 import { ElMessage } from 'element-plus'
 import { InfoFilled } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getBatteryList } from '@/api/battery'
 import { getUserList } from '@/api/system'
 
 const list = ref([])
@@ -162,18 +161,38 @@ const resetTemp = () => {
 
 const ensureBatteryOptions = async () => {
   if (batteryOptions.value.length > 0) return
-  const res = await getBatteryList({ pageNum: 1, pageSize: 1000 })
-  const records = res?.records || res?.data?.records || []
-  batteryOptions.value = (records || []).map(item => ({
-    batteryId: String(item.batteryId || '').trim()
-  })).filter(item => item.batteryId)
+  const res = await getVehicleList({ pageNum: 1, pageSize: 1000 })
+  const pageData = res?.records || res?.data?.records || []
+  batteryOptions.value = (pageData || []).map(item => {
+    const batteryId = String(item.batteryId || '').trim()
+    const ownerId = item.ownerId
+    return {
+      batteryId,
+      ownerId
+    }
+  }).filter(item => item.batteryId && item.ownerId != null)
+}
+
+const onBatteryChange = (val) => {
+  const id = String(val || '').trim()
+  if (!id) {
+    temp.fromOwner = undefined
+    temp.toOwner = undefined
+    return
+  }
+  const match = batteryOptions.value.find(item => item.batteryId === id)
+  if (match && match.ownerId != null) {
+    temp.fromOwner = match.ownerId
+  }
+  temp.toOwner = undefined
 }
 
 const ensureOwnerOptions = async () => {
   if (ownerOptions.value.length > 0) return
   const res = await getUserList({ pageNum: 1, pageSize: 1000 })
-  const pageData = res?.records || res?.data?.records || []
-  ownerOptions.value = (pageData || []).map(item => {
+  const pageData = res || {}
+  const rows = pageData.records || []
+  ownerOptions.value = rows.map(item => {
     const id = item.userId
     const username = String(item.username || '').trim()
     const nickname = String(item.nickname || '').trim()

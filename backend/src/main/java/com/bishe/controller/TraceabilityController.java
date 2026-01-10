@@ -125,7 +125,30 @@ public class TraceabilityController {
         if (record.getToOwner() == null) {
             return Result.error(400, "新拥有者ID不能为空");
         }
-        return Result.success(transferService.save(record));
+
+        boolean saved = transferService.save(record);
+        if (!saved) {
+            return Result.success(false);
+        }
+
+        String batteryId = record.getBatteryId();
+        Long toOwner = record.getToOwner();
+        if (org.springframework.util.StringUtils.hasText(batteryId) && toOwner != null) {
+            com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<VehicleInfo> wrapper =
+                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<>();
+            wrapper.eq(VehicleInfo::getBatteryId, batteryId.trim())
+                    .orderByDesc(VehicleInfo::getBindTime)
+                    .last("limit 1");
+            VehicleInfo vehicle = vehicleService.getOne(wrapper);
+            if (vehicle != null) {
+                VehicleInfo update = new VehicleInfo();
+                update.setVehicleId(vehicle.getVehicleId());
+                update.setOwnerId(toOwner);
+                vehicleService.updateById(update);
+            }
+        }
+
+        return Result.success(true);
     }
 
     // ==================== 上链交易 (ChainTransaction) ====================
