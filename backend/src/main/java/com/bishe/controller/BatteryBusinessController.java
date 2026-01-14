@@ -47,6 +47,8 @@ public class BatteryBusinessController {
     private ISysUserService sysUserService;
     @Autowired
     private ISysRoleService sysRoleService;
+    @Autowired
+    private ISysDeptService sysDeptService;
 
     private Long getCurrentUserId(HttpServletRequest request) {
         if (request == null) {
@@ -243,10 +245,37 @@ public class BatteryBusinessController {
     }
 
     @PostMapping("/batch")
-    public Result<Boolean> saveBatch(@RequestBody ProductionBatch batch) {
+    public Result<Boolean> saveBatch(@RequestBody ProductionBatch batch, HttpServletRequest request) {
+        Long userId = getCurrentUserId(request);
+        if (!hasAnyRole(userId, "admin", "manufacturer")) {
+            return forbidden();
+        }
+        if (batch == null) {
+            return Result.error(400, "参数不能为空");
+        }
+        if (!StringUtils.hasText(batch.getBatchNo())) {
+            return Result.error(400, "批次号不能为空");
+        }
         if (batch.getQuantity() == null || batch.getQuantity() <= 0) {
             return Result.error(400, "最大生产数量必须大于0");
         }
+        if (batch.getProduceDate() == null) {
+            batch.setProduceDate(java.time.LocalDate.now());
+        }
+
+        if (batch.getManufacturerId() == null) {
+            SysUser user = userId != null ? sysUserService.getById(userId) : null;
+            if (user == null || user.getDeptId() == null) {
+                return Result.error(400, "当前账号未绑定生产商机构，无法创建批次");
+            }
+            batch.setManufacturerId(user.getDeptId());
+        } else {
+            SysDept dept = sysDeptService.getById(batch.getManufacturerId());
+            if (dept == null) {
+                return Result.error(400, "生产商ID不存在，请检查后重试");
+            }
+        }
+
         return Result.success(productionBatchService.save(batch));
     }
 

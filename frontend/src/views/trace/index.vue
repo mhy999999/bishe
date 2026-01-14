@@ -181,6 +181,7 @@ import Pagination from '@/components/Pagination/index.vue'
 import { ElMessage } from 'element-plus'
 import { InfoFilled } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
+import { BATTERY_STATUS_MAP } from '@/constants/batteryStatus'
 
 const route = useRoute()
 const router = useRouter()
@@ -205,13 +206,7 @@ const traceLoading = ref(false)
 
 const batteryIdTrimmed = computed(() => String(batteryQuery.batteryIdInput || '').trim())
 const showAllBatteries = computed(() => activeTab.value === 'battery' && !batteryIdTrimmed.value)
-const batteryStatusMap = {
-  1: { text: '生产', type: 'info' },
-  2: { text: '销售', type: 'success' },
-  3: { text: '使用', type: 'warning' },
-  4: { text: '维修', type: 'danger' },
-  5: { text: '回收', type: 'danger' }
-}
+const batteryStatusMap = BATTERY_STATUS_MAP
 
 const txBatteryId = ref('')
 const txTraceEvents = ref([])

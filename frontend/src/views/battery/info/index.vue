@@ -103,11 +103,12 @@ import { ref, reactive, onMounted } from 'vue'
 import { getBatteryList, saveBattery, updateBattery, deleteBattery, getBatchList } from '@/api/battery'
 import Pagination from '@/components/Pagination/index.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { BATTERY_STATUS_MAP } from '@/constants/batteryStatus'
 
 const list = ref([])
 const total = ref(0)
 const listLoading = ref(true)
-const batchOptions = ref([]) // 生产批次选项
+const batchOptions = ref([])
 
 const listQuery = reactive({
   pageNum: 1,
@@ -115,15 +116,7 @@ const listQuery = reactive({
   batteryId: undefined
 })
 
-const statusMap = {
-  6: { text: '待生产', type: 'info' },
-  0: { text: '生产中', type: 'primary' },
-  1: { text: '已上架', type: 'success' },
-  2: { text: '已废弃', type: 'danger' },
-  3: { text: '待质检', type: 'warning' },
-  4: { text: '已销售', type: 'success' },
-  5: { text: '生产结束', type: 'info' }
-}
+const statusMap = BATTERY_STATUS_MAP
 
 const temp = reactive({
   batteryId: '',

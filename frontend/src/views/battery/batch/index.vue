@@ -51,8 +51,11 @@
         <el-form-item label="批次号">
           <el-input v-model="temp.batchNo" />
         </el-form-item>
-        <el-form-item label="生产商ID">
-          <el-input v-model="temp.manufacturerId" />
+        <el-form-item label="生产商">
+          <el-select v-model="temp.manufacturerId" placeholder="请选择生产商" filterable style="width: 100%;">
+            <el-option v-for="item in manufacturerOptions" :key="item.deptId" :label="item.deptName"
+              :value="item.deptId" />
+          </el-select>
         </el-form-item>
         <el-form-item label="生产日期">
           <el-date-picker v-model="temp.produceDate" type="date" placeholder="选择日期" value-format="YYYY-MM-DD" />
@@ -76,6 +79,8 @@ import { ref, reactive, onMounted } from 'vue'
 import { getBatchList, saveBatch, endBatch, getBatteryList } from '@/api/battery'
 import Pagination from '@/components/Pagination/index.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { getDeptList } from '@/api/system'
+import { BATTERY_STATUS_MAP } from '@/constants/batteryStatus'
 
 const list = ref([])
 const total = ref(0)
@@ -89,15 +94,7 @@ const dialogFormVisible = ref(false)
 const batteryDialogVisible = ref(false)
 const batteryList = ref([])
 
-const statusMap = {
-  6: { text: '待生产', type: 'info' },
-  0: { text: '生产中', type: 'primary' },
-  1: { text: '已上架', type: 'success' },
-  2: { text: '已废弃', type: 'danger' },
-  3: { text: '待质检', type: 'warning' },
-  4: { text: '已销售', type: 'success' },
-  5: { text: '生产结束', type: 'info' }
-}
+const statusMap = BATTERY_STATUS_MAP
 
 const temp = reactive({
   batchNo: '',
@@ -105,6 +102,17 @@ const temp = reactive({
   produceDate: '',
   quantity: ''
 })
+
+const manufacturerOptions = ref([])
+
+const loadManufacturerOptions = () => {
+  getDeptList().then((res) => {
+    const list = res?.data || res || []
+    manufacturerOptions.value = Array.isArray(list) ? list : []
+  }).catch(() => {
+    manufacturerOptions.value = []
+  })
+}
 
 const getList = () => {
   listLoading.value = true
@@ -165,5 +173,6 @@ const handleEndProduction = (row) => {
 
 onMounted(() => {
   getList()
+  loadManufacturerOptions()
 })
 </script>
