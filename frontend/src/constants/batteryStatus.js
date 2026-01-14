@@ -6,6 +6,6 @@ export const BATTERY_STATUS_MAP = {
   2: { text: '已废弃', type: 'danger' },
   4: { text: '已销售', type: 'success' },
   5: { text: '生产结束', type: 'info' },
-  7: { text: '已回收', type: 'info' }
+  7: { text: '已回收', type: 'info' },
+  8: { text: '已删除', type: 'info' }
 }
-

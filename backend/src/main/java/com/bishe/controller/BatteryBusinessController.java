@@ -106,12 +106,20 @@ public class BatteryBusinessController {
                                               @RequestParam(defaultValue = "10") Integer pageSize,
                                               @RequestParam(required = false) String batteryId,
                                               @RequestParam(required = false) Long batchId,
-                                              @RequestParam(required = false) Integer status) {
+                                              @RequestParam(required = false) Integer status,
+                                              HttpServletRequest request) {
         Page<BatteryInfo> page = new Page<>(pageNum, pageSize);
         LambdaQueryWrapper<BatteryInfo> wrapper = new LambdaQueryWrapper<>();
         wrapper.like(StringUtils.hasText(batteryId), BatteryInfo::getBatteryId, batteryId);
         wrapper.eq(batchId != null, BatteryInfo::getBatchId, batchId);
-        wrapper.eq(status != null, BatteryInfo::getStatus, status);
+        Long userId = getCurrentUserId(request);
+        boolean isAdmin = hasAnyRole(userId, "admin");
+        if (status != null) {
+            wrapper.eq(BatteryInfo::getStatus, status);
+        } else if (!isAdmin) {
+            wrapper.ne(BatteryInfo::getStatus, 2);
+            wrapper.ne(BatteryInfo::getStatus, 8);
+        }
         wrapper.orderByDesc(BatteryInfo::getCreateTime);
         return Result.success(batteryInfoService.page(page, wrapper));
     }
@@ -232,7 +240,20 @@ public class BatteryBusinessController {
 
     @DeleteMapping("/info/{id}")
     public Result<Boolean> removeInfo(@PathVariable String id) {
-        return Result.success(batteryInfoService.removeById(id));
+        if (!StringUtils.hasText(id)) {
+            return Result.error(400, "电池ID不能为空");
+        }
+        BatteryInfo existing = batteryInfoService.getById(id);
+        if (existing == null) {
+            return Result.error(400, "电池不存在");
+        }
+        if (existing.getStatus() != null && (existing.getStatus() == 2 || existing.getStatus() == 8)) {
+            return Result.success(true);
+        }
+        BatteryInfo update = new BatteryInfo();
+        update.setBatteryId(id);
+        update.setStatus(2);
+        return Result.success(batteryInfoService.updateById(update));
     }
 
     // ==================== 生产批次 (ProductionBatch) ====================
@@ -477,7 +498,7 @@ public class BatteryBusinessController {
         if (battery == null) {
             return Result.error(400, "电池不存在");
         }
-        if (battery.getStatus() != null && (battery.getStatus() == 2 || battery.getStatus() == 6)) {
+        if (battery.getStatus() != null && (battery.getStatus() == 2 || battery.getStatus() == 6 || battery.getStatus() == 7 || battery.getStatus() == 8)) {
             return Result.error(400, "当前电池状态不允许提交维修");
         }
         LambdaQueryWrapper<MaintenanceRecord> pendingWrapper = new LambdaQueryWrapper<>();
@@ -522,7 +543,7 @@ public class BatteryBusinessController {
         if (battery == null) {
             return Result.error(400, "电池不存在");
         }
-        if (battery.getStatus() != null && (battery.getStatus() == 2 || battery.getStatus() == 6)) {
+        if (battery.getStatus() != null && (battery.getStatus() == 2 || battery.getStatus() == 6 || battery.getStatus() == 7 || battery.getStatus() == 8)) {
             return Result.error(400, "当前电池状态不允许提交维修");
         }
         LambdaQueryWrapper<MaintenanceRecord> pendingWrapper = new LambdaQueryWrapper<>();
