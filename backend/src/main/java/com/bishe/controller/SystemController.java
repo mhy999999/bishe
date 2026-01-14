@@ -35,6 +35,8 @@ public class SystemController {
     @Autowired
     private ISysMenuService sysMenuService;
     @Autowired
+    private IVehicleInfoService vehicleService;
+    @Autowired
     private com.bishe.utils.JwtUtils jwtUtils;
     @Autowired
     private SysUserMapper sysUserMapper;
@@ -108,6 +110,7 @@ public class SystemController {
         }
         LambdaQueryWrapper<SysUser> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(SysUser::getUsername, loginDto.getUsername());
+        wrapper.eq(SysUser::getStatus, 0);
         SysUser user = sysUserService.getOne(wrapper);
         if (user == null) {
             return Result.error("用户不存在");
@@ -193,6 +196,7 @@ public class SystemController {
         }
         LambdaQueryWrapper<SysUser> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(SysUser::getUsername, sysUser.getUsername());
+        wrapper.ne(SysUser::getStatus, 1);
         if (sysUserService.count(wrapper) > 0) {
             return Result.error("用户名已存在");
         }
@@ -232,6 +236,7 @@ public class SystemController {
         Page<SysUser> page = new Page<>(pageNum, pageSize);
         LambdaQueryWrapper<SysUser> wrapper = new LambdaQueryWrapper<>();
         wrapper.like(StringUtils.hasText(username), SysUser::getUsername, username);
+        wrapper.eq(SysUser::getStatus, 0);
         wrapper.orderByDesc(SysUser::getCreateTime);
         Page<SysUser> result = sysUserService.page(page, wrapper);
 
@@ -342,6 +347,9 @@ public class SystemController {
             return forbidden();
         }
         SysUser user = sysUserService.getById(id);
+        if (user != null && user.getStatus() != null && user.getStatus() != 0) {
+            return Result.error("用户不存在");
+        }
         if (user != null) {
             user.setPassword(null);
         }
@@ -440,8 +448,18 @@ public class SystemController {
         if (!isAdmin(getCurrentUserId(request))) {
             return forbidden();
         }
+        SysUser user = sysUserService.getById(id);
+        if (user == null) {
+            return Result.error("用户不存在");
+        }
+
         sysUserMapper.deleteUserRolesByUserId(id);
-        return Result.success(sysUserService.removeById(id));
+
+        SysUser toUpdate = new SysUser();
+        toUpdate.setUserId(id);
+        toUpdate.setStatus(1);
+        toUpdate.setUpdateTime(java.time.LocalDateTime.now());
+        return Result.success(sysUserService.updateById(toUpdate));
     }
 
     @GetMapping("/user/{id}/roleIds")
