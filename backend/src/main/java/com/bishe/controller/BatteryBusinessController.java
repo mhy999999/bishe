@@ -119,7 +119,7 @@ public class BatteryBusinessController {
     @PostMapping("/sales/audit")
     public Result<Boolean> auditSales(@RequestBody SalesRecord auditData, HttpServletRequest request) {
         Long userId = getCurrentUserId(request);
-        if (!hasAnyRole(userId, "admin", "sales")) {
+        if (!hasAnyRole(userId, "admin", "sales", "dealer")) {
             return forbidden();
         }
         if (auditData == null || auditData.getSalesId() == null) {
@@ -428,7 +428,7 @@ public class BatteryBusinessController {
                                                          @RequestParam(required = false) Integer status,
                                                          HttpServletRequest request) {
         Long userId = getCurrentUserId(request);
-        if (!hasAnyRole(userId, "admin", "maintainer", "maintenance")) {
+        if (!hasAnyRole(userId, "admin", "maintainer", "maintenance", "dealer")) {
             return forbidden();
         }
         Page<MaintenanceRecord> page = new Page<>(pageNum, pageSize);
@@ -994,7 +994,7 @@ public class BatteryBusinessController {
     @GetMapping("/maintenance/material/preview/doc")
     public Result<String> previewMaintenanceMaterialDoc(@RequestParam("url") String url, HttpServletRequest request) {
         Long userId = getCurrentUserId(request);
-        if (!hasAnyRole(userId, "admin", "maintainer", "maintenance")) {
+        if (!hasAnyRole(userId, "admin", "maintainer", "maintenance", "dealer")) {
             return forbidden();
         }
         if (!StringUtils.hasText(url)) {

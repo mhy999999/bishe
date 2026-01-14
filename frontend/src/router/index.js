@@ -112,13 +112,13 @@ export const asyncRoutes = [
         name: 'BatteryMaintenance',
         component: ParentView,
         redirect: '/battery/maintenance/list',
-        meta: { title: '电池维修', icon: 'Tools', roles: ['admin'] },
+        meta: { title: '电池维修', icon: 'Tools', roles: ['admin', 'dealer'] },
         children: [
           {
             path: 'list',
             name: 'MaintenanceRecordList',
             component: () => import('@/views/battery/maintenance/index.vue'),
-            meta: { title: '维修记录', icon: 'List', roles: ['admin'] }
+            meta: { title: '维修记录', icon: 'List', roles: ['admin', 'dealer'] }
           }
         ]
       },
@@ -146,7 +146,7 @@ export const asyncRoutes = [
         path: 'audit',
         name: 'SalesAudit',
         component: () => import('@/views/battery/sales/audit.vue'),
-        meta: { title: '销售审核', icon: 'Stamp', roles: ['admin', 'sales'] }
+        meta: { title: '销售审核', icon: 'Stamp', roles: ['admin', 'dealer'] }
       }
         ]
       }
