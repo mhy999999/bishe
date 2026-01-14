@@ -1,5 +1,5 @@
 <template>
-  <BatteryMaintenanceList />
+  <BatteryMaintenanceList mode="workbench" />
 </template>
 
 <script setup>

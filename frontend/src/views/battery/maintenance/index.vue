@@ -11,8 +11,8 @@
       <el-button class="filter-item" type="primary" icon="Search" @click="handleFilter">
         搜索
       </el-button>
-      <el-button class="filter-item" type="primary" icon="Edit" @click="handleCreate">
-        新增维修记录
+      <el-button v-if="isWorkbench" class="filter-item" type="primary" icon="Edit" @click="handleCreate">
+        新建售后工单
       </el-button>
     </div>
 
@@ -56,7 +56,7 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" align="center" width="240" class-name="small-padding fixed-width">
+      <el-table-column v-if="isWorkbench" label="操作" align="center" width="240" class-name="small-padding fixed-width">
         <template #default="{ row }">
           <template v-if="row.status === 0 || row.status === 1">
             <el-button type="success" size="small" @click="handleComplete(row)">提交完工</el-button>
@@ -68,7 +68,7 @@
     <pagination v-show="total > 0" :total="total" v-model:page="listQuery.pageNum" v-model:limit="listQuery.pageSize"
       @pagination="getList" />
 
-    <el-dialog title="新增工单" v-model="dialogFormVisible">
+    <el-dialog :title="isWorkbench ? '新增售后工单' : '新增维修记录'" v-model="dialogFormVisible">
       <el-form ref="dataForm" :model="temp" :rules="rules" label-width="100px">
         <el-form-item label="电池ID" prop="batteryId">
           <el-select v-model="temp.batteryId" filterable placeholder="请选择电池ID" :loading="batteryLoading"
@@ -155,12 +155,21 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { getMaintenanceList, saveMaintenance, uploadMaintenanceMaterial, completeMaintenance, getBatteryList } from '@/api/battery'
 import Pagination from '@/components/Pagination/index.vue'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/store/user'
 import { useRoute, useRouter } from 'vue-router'
+
+const props = defineProps({
+  mode: {
+    type: String,
+    default: 'archive'
+  }
+})
+
+const isWorkbench = computed(() => props.mode === 'workbench')
 
 const dataForm = ref()
 const userStore = useUserStore()
@@ -176,6 +185,10 @@ const listQuery = reactive({
   batteryId: undefined,
   status: undefined
 })
+
+if (props.mode === 'workbench') {
+  listQuery.status = 1
+}
 
 const statusMap = {
   0: { text: '待处理', type: 'warning' },
