@@ -559,11 +559,27 @@ public class SystemController {
 
     @GetMapping("/dept/list")
     public Result<List<SysDept>> listDept(HttpServletRequest request) {
-        if (!isAdmin(getCurrentUserId(request))) {
+        Long userId = getCurrentUserId(request);
+        if (userId == null) {
             return forbidden();
         }
-        // 部门通常是树形结构，这里简单返回列表，前端处理树形
-        return Result.success(sysDeptService.list());
+
+        if (isAdmin(userId)) {
+            // 管理员保留原有行为：查看全部部门
+            return Result.success(sysDeptService.list());
+        }
+
+        SysUser currentUser = sysUserService.getById(userId);
+        if (currentUser == null || currentUser.getDeptId() == null) {
+            return Result.success(java.util.Collections.emptyList());
+        }
+
+        SysDept dept = sysDeptService.getById(currentUser.getDeptId());
+        if (dept == null) {
+            return Result.success(java.util.Collections.emptyList());
+        }
+
+        return Result.success(java.util.Collections.singletonList(dept));
     }
 
     @GetMapping("/dept/tree")

@@ -96,7 +96,7 @@ import Pagination from '@/components/Pagination/index.vue'
 import { ElMessage } from 'element-plus'
 import { InfoFilled } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getUserList } from '@/api/system'
+import { getUserOptions } from '@/api/system'
 
 const list = ref([])
 const total = ref(0)
@@ -189,9 +189,8 @@ const onBatteryChange = (val) => {
 
 const ensureOwnerOptions = async () => {
   if (ownerOptions.value.length > 0) return
-  const res = await getUserList({ pageNum: 1, pageSize: 1000 })
-  const pageData = res || {}
-  const rows = pageData.records || []
+  const res = await getUserOptions()
+  const rows = Array.isArray(res) ? res : []
   ownerOptions.value = rows.map(item => {
     const id = item.userId
     const username = String(item.username || '').trim()

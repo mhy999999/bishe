@@ -75,12 +75,15 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { getBatchList, saveBatch, endBatch, getBatteryList } from '@/api/battery'
 import Pagination from '@/components/Pagination/index.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getDeptList } from '@/api/system'
 import { BATTERY_STATUS_MAP } from '@/constants/batteryStatus'
+import { useUserStore } from '@/store/user'
+
+const userStore = useUserStore()
 
 const list = ref([])
 const total = ref(0)
@@ -105,13 +108,32 @@ const temp = reactive({
 
 const manufacturerOptions = ref([])
 
+const isAdmin = computed(() => {
+  const roles = userStore.roles || []
+  return (Array.isArray(roles) ? roles : []).includes('admin')
+})
+
 const loadManufacturerOptions = () => {
-  getDeptList().then((res) => {
-    const list = res?.data || res || []
-    manufacturerOptions.value = Array.isArray(list) ? list : []
-  }).catch(() => {
-    manufacturerOptions.value = []
-  })
+  if (isAdmin.value) {
+    getDeptList().then((res) => {
+      const list = res?.data || res || []
+      manufacturerOptions.value = Array.isArray(list) ? list : []
+    }).catch(() => {
+      manufacturerOptions.value = []
+    })
+  } else {
+    const user = userStore.user || userStore._rawState?.user || null
+    const deptId = user?.deptId
+    const deptName = user?.deptName || userStore.name || ''
+    if (deptId != null) {
+      manufacturerOptions.value = [{ deptId, deptName }]
+      if (!temp.manufacturerId) {
+        temp.manufacturerId = deptId
+      }
+    } else {
+      manufacturerOptions.value = []
+    }
+  }
 }
 
 const getList = () => {

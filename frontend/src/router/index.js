@@ -66,7 +66,7 @@ export const asyncRoutes = [
     component: Layout,
     redirect: '/battery/info',
     name: 'Battery',
-    meta: { title: '电池管理', icon: 'Box', roles: ['admin', 'manufacturer', 'maintainer', 'maintenance', 'sales', 'dealer'] },
+    meta: { title: '电池管理', icon: 'Box', roles: ['admin', 'manufacturer', 'sales', 'dealer'] },
     children: [
       {
         path: 'info',
@@ -129,12 +129,12 @@ export const asyncRoutes = [
         redirect: '/battery/sales/list',
         meta: { title: '电池销售', icon: 'ShoppingCart', roles: ['admin', 'sales', 'dealer'] },
         children: [
-          {
-            path: 'list',
-            name: 'SalesRecordList',
-            component: () => import('@/views/battery/sales/index.vue'),
-            meta: { title: '销售记录', icon: 'List' }
-          },
+      {
+        path: 'list',
+        name: 'SalesRecordList',
+        component: () => import('@/views/battery/sales/index.vue'),
+        meta: { title: '销售记录', icon: 'List', roles: ['admin', 'sales', 'dealer'] }
+      },
           {
             path: 'material-preview',
             name: 'SalesMaterialPreview',
@@ -142,12 +142,12 @@ export const asyncRoutes = [
             meta: { title: '材料预览', icon: 'View', roles: ['admin', 'sales', 'dealer', 'maintainer', 'maintenance'], activeMenu: '/battery/sales/list' },
             hidden: true
           },
-          {
-            path: 'audit',
-            name: 'SalesAudit',
-            component: () => import('@/views/battery/sales/audit.vue'),
-            meta: { title: '销售审核', icon: 'Stamp' }
-          }
+      {
+        path: 'audit',
+        name: 'SalesAudit',
+        component: () => import('@/views/battery/sales/audit.vue'),
+        meta: { title: '销售审核', icon: 'Stamp', roles: ['admin', 'sales'] }
+      }
         ]
       }
     ]

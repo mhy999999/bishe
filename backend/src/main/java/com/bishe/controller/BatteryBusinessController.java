@@ -119,7 +119,7 @@ public class BatteryBusinessController {
     @PostMapping("/sales/audit")
     public Result<Boolean> auditSales(@RequestBody SalesRecord auditData, HttpServletRequest request) {
         Long userId = getCurrentUserId(request);
-        if (!hasAnyRole(userId, "admin", "sales", "dealer")) {
+        if (!hasAnyRole(userId, "admin", "sales")) {
             return forbidden();
         }
         if (auditData == null || auditData.getSalesId() == null) {
