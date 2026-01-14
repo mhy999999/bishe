@@ -183,7 +183,7 @@ public class TraceabilityController {
                                                           @RequestParam(required = false) String recycleNo,
                                                           HttpServletRequest request) {
         Long userId = getCurrentUserId(request);
-        if (!hasAnyRole(userId, "admin", "recycler", "maintainer", "maintenance")) {
+        if (!hasAnyRole(userId, "admin", "recycler", "maintainer", "maintenance", "manufacturer", "dealer", "owner")) {
             return forbidden();
         }
         Page<RecyclingAppraisal> page = new Page<>(pageNum, pageSize);
